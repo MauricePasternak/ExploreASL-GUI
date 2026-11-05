@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor, cleanup } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { exists } from "@tauri-apps/plugin-fs";
@@ -35,6 +36,16 @@ const inspection = {
   setupRecovered: 0,
 };
 
+function renderPage(props: { onOpenSettings?: () => void } = {}) {
+  return render(
+    <MantineProvider env="test">
+      <MemoryRouter>
+        <LandingPage {...props} />
+      </MemoryRouter>
+    </MantineProvider>,
+  );
+}
+
 describe("LandingPage", () => {
   afterEach(() => cleanup());
 
@@ -57,17 +68,15 @@ describe("LandingPage", () => {
   });
 
   it("renders the primary landing actions", async () => {
-    render(
-      <MantineProvider env="test">
-        <MemoryRouter>
-          <LandingPage />
-        </MemoryRouter>
-      </MantineProvider>,
-    );
+    renderPage();
 
     expect(screen.getByRole("heading", { name: /welcome to exploreasl/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /new project/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /open project/i })).toBeInTheDocument();
+    expect(screen.getByTestId("landing-new-project-btn")).toHaveTextContent("Choose folder");
+    expect(screen.getByTestId("landing-open-project-btn")).toHaveTextContent("Choose project file");
+    expect(screen.getByRole("heading", { name: "New project" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Open project" })).toBeInTheDocument();
 
     await waitFor(() => {
       expect(screen.getByText(/no recent projects/i)).toBeInTheDocument();
@@ -81,15 +90,10 @@ describe("LandingPage", () => {
         if (command === "is_writable") return false;
         throw new Error("Invalid project file");
       });
-      render(
-        <MantineProvider env="test">
-          <MemoryRouter>
-            <LandingPage />
-          </MemoryRouter>
-        </MantineProvider>,
-      );
+      renderPage();
       const testId = `landing-${action}-project-path`;
-      fireEvent.click(screen.getByTestId(testId));
+      fireEvent.click(screen.getByTestId(`landing-${action}-project-more`));
+      fireEvent.click(await screen.findByTestId(testId));
       fireEvent.change(screen.getByTestId(`${testId}-input`), {
         target: { value: "/study/project.easl" },
       });
@@ -109,19 +113,37 @@ describe("LandingPage", () => {
     },
   );
 
+  it("opens each manual-path menu by keyboard and restores split-button focus on Escape", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    for (const action of ["new", "open"]) {
+      const trigger = screen.getByTestId(`landing-${action}-project-more`);
+      const testId = `landing-${action}-project-path`;
+      trigger.focus();
+      await user.keyboard("{Enter}");
+      expect(await screen.findByTestId(testId)).toHaveTextContent(
+        action === "new" ? "Enter folder path…" : "Enter project file path…",
+      );
+      await user.keyboard("{ArrowDown}{Enter}");
+      await waitFor(() => expect(screen.getByTestId(`${testId}-input`)).toHaveFocus());
+      await user.keyboard("{Escape}");
+      await waitFor(() => {
+        expect(screen.queryByTestId(`${testId}-dialog`)).not.toBeInTheDocument();
+        expect(trigger).toHaveFocus();
+      });
+    }
+    expect(open).not.toHaveBeenCalled();
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
   it("rejects project creation when the selected directory is not writable", async () => {
     const createProject = vi.fn();
     useProjectStore.setState({ createProject });
     vi.mocked(open).mockResolvedValue("/tmp/no-write");
     vi.mocked(invoke).mockResolvedValue(false);
 
-    render(
-      <MantineProvider env="test">
-        <MemoryRouter>
-          <LandingPage />
-        </MemoryRouter>
-      </MantineProvider>,
-    );
+    renderPage();
 
     fireEvent.click(screen.getAllByRole("button", { name: /new project/i })[0]);
 
@@ -149,13 +171,7 @@ describe("LandingPage", () => {
       return path === `/tmp/existing-project/${PROJECT_FILE_NAME}`;
     });
 
-    render(
-      <MantineProvider env="test">
-        <MemoryRouter>
-          <LandingPage />
-        </MemoryRouter>
-      </MantineProvider>,
-    );
+    renderPage();
 
     fireEvent.click(screen.getAllByRole("button", { name: /new project/i })[0]);
 
@@ -179,13 +195,7 @@ describe("LandingPage", () => {
 
   it("scopes repeated creation errors to the selected directory", async () => {
     vi.mocked(invoke).mockResolvedValue(false);
-    render(
-      <MantineProvider env="test">
-        <MemoryRouter>
-          <LandingPage />
-        </MemoryRouter>
-      </MantineProvider>,
-    );
+    renderPage();
 
     const directories = ["/first-project", "/second-project", "/first-project"];
     for (const [index, directory] of directories.entries()) {
@@ -227,13 +237,7 @@ describe("LandingPage", () => {
           },
     );
 
-    render(
-      <MantineProvider env="test">
-        <MemoryRouter>
-          <LandingPage />
-        </MemoryRouter>
-      </MantineProvider>,
-    );
+    renderPage();
 
     fireEvent.click(screen.getAllByRole("button", { name: /new project/i })[0]);
     await waitFor(() =>
@@ -303,13 +307,7 @@ describe("LandingPage", () => {
             },
       );
 
-      render(
-        <MantineProvider env="test">
-          <MemoryRouter>
-            <LandingPage />
-          </MemoryRouter>
-        </MantineProvider>,
-      );
+      renderPage();
 
       fireEvent.click(screen.getByTestId("landing-new-project-btn"));
       await waitFor(() =>
@@ -350,13 +348,7 @@ describe("LandingPage", () => {
     });
     vi.mocked(open).mockResolvedValue("/tmp/recovery/project.easl");
 
-    render(
-      <MantineProvider env="test">
-        <MemoryRouter>
-          <LandingPage />
-        </MemoryRouter>
-      </MantineProvider>,
-    );
+    renderPage();
 
     fireEvent.click(screen.getByTestId("landing-open-project-btn"));
     await waitFor(() => expect(screen.getByTestId("project-recovery-dialog")).toBeInTheDocument());
@@ -385,13 +377,7 @@ describe("LandingPage", () => {
     });
     vi.mocked(open).mockResolvedValue("/tmp/recovery/project.easl");
 
-    render(
-      <MantineProvider env="test">
-        <MemoryRouter>
-          <LandingPage />
-        </MemoryRouter>
-      </MantineProvider>,
-    );
+    renderPage();
 
     fireEvent.click(screen.getByTestId("landing-open-project-btn"));
     await screen.findByTestId("project-recovery-dialog");
@@ -403,13 +389,7 @@ describe("LandingPage", () => {
   it("shows WelcomeCard when no execution profiles are configured", () => {
     seedZeroProfilesGate();
 
-    render(
-      <MantineProvider env="test">
-        <MemoryRouter>
-          <LandingPage onOpenSettings={vi.fn()} />
-        </MemoryRouter>
-      </MantineProvider>,
-    );
+    renderPage({ onOpenSettings: vi.fn() });
 
     expect(screen.getByTestId("welcome-card")).toBeInTheDocument();
     expect(screen.queryByTestId("landing-new-project-btn")).not.toBeInTheDocument();
@@ -420,13 +400,7 @@ describe("LandingPage", () => {
     seedZeroProfilesGate();
     const onOpenSettings = vi.fn();
 
-    render(
-      <MantineProvider env="test">
-        <MemoryRouter>
-          <LandingPage onOpenSettings={onOpenSettings} />
-        </MemoryRouter>
-      </MantineProvider>,
-    );
+    renderPage({ onOpenSettings });
 
     fireEvent.click(screen.getByTestId("welcome-open-settings-btn"));
     expect(onOpenSettings).toHaveBeenCalledTimes(1);
@@ -435,17 +409,13 @@ describe("LandingPage", () => {
   it("disables project actions when all profiles are invalid", async () => {
     seedInvalidProfileGate();
 
-    render(
-      <MantineProvider env="test">
-        <MemoryRouter>
-          <LandingPage />
-        </MemoryRouter>
-      </MantineProvider>,
-    );
+    renderPage();
 
     expect(screen.getByTestId("landing-invalid-profiles-alert")).toBeInTheDocument();
     expect(screen.getByTestId("landing-new-project-btn")).toBeDisabled();
     expect(screen.getByTestId("landing-open-project-btn")).toBeDisabled();
+    expect(screen.getByTestId("landing-new-project-more")).toBeDisabled();
+    expect(screen.getByTestId("landing-open-project-more")).toBeDisabled();
   });
 
   it("disables recent project open buttons when all profiles are invalid", async () => {
@@ -459,13 +429,7 @@ describe("LandingPage", () => {
     }));
     vi.mocked(exists).mockResolvedValue(true);
 
-    render(
-      <MantineProvider env="test">
-        <MemoryRouter>
-          <LandingPage />
-        </MemoryRouter>
-      </MantineProvider>,
-    );
+    renderPage();
 
     await waitFor(() => {
       expect(screen.getByTestId("landing-recent-projects-list")).toBeInTheDocument();
@@ -473,6 +437,8 @@ describe("LandingPage", () => {
 
     const openBtn = screen.getByTestId("recent-open-btn--tmp-recent-project-easl");
     expect(openBtn).toBeDisabled();
+    expect(openBtn).toHaveAccessibleDescription("/tmp/recent/project.easl Available");
+    expect(screen.getByTestId("recent-remove-btn--tmp-recent-project-easl")).toBeEnabled();
   });
 
   it("rejects opening easl files that are not named project.easl", async () => {
@@ -481,13 +447,7 @@ describe("LandingPage", () => {
     vi.mocked(open).mockResolvedValue("/tmp/custom-name.easl");
     vi.mocked(invoke).mockRejectedValueOnce({ message: "Expected project.easl" });
 
-    render(
-      <MantineProvider env="test">
-        <MemoryRouter>
-          <LandingPage />
-        </MemoryRouter>
-      </MantineProvider>,
-    );
+    renderPage();
 
     fireEvent.click(screen.getAllByRole("button", { name: /open project/i })[0]);
 
@@ -520,13 +480,7 @@ describe("LandingPage", () => {
     vi.mocked(exists).mockResolvedValue(true);
     vi.mocked(invoke).mockResolvedValue({ ...inspection, duplicatePath: "/old/project.easl" });
 
-    render(
-      <MantineProvider env="test">
-        <MemoryRouter>
-          <LandingPage />
-        </MemoryRouter>
-      </MantineProvider>,
-    );
+    renderPage();
     fireEvent.click(screen.getByTestId("landing-open-project-btn"));
     await screen.findByTestId("project-identity-dialog");
     fireEvent.click(screen.getByTestId("project-identity-cancel-btn"));
@@ -560,13 +514,7 @@ describe("LandingPage", () => {
     vi.mocked(exists).mockResolvedValue(true);
     vi.mocked(invoke).mockResolvedValue({ ...inspection, duplicatePath: "/old/project.easl" });
 
-    render(
-      <MantineProvider env="test">
-        <MemoryRouter>
-          <LandingPage />
-        </MemoryRouter>
-      </MantineProvider>,
-    );
+    renderPage();
     fireEvent.click(screen.getByTestId("landing-open-project-btn"));
     await screen.findByTestId("project-identity-dialog");
     fireEvent.click(screen.getByTestId("project-identity-moved-btn"));
@@ -575,6 +523,7 @@ describe("LandingPage", () => {
       expect(useGlobalStore.getState().settings.recentProjects[0]).toEqual({
         path: "/new/project.easl",
         projectId: "same-id",
+        name: "Identity Project",
       }),
     );
     expect(loadProject).toHaveBeenCalledWith("/new/project.easl", {
@@ -606,13 +555,7 @@ describe("LandingPage", () => {
       duplicatePath: "/old/project.easl",
     });
 
-    render(
-      <MantineProvider env="test">
-        <MemoryRouter>
-          <LandingPage />
-        </MemoryRouter>
-      </MantineProvider>,
-    );
+    renderPage();
     fireEvent.click(screen.getByTestId("landing-open-project-btn"));
     await screen.findByTestId("project-identity-dialog");
     fireEvent.click(screen.getByTestId("project-identity-copied-btn"));
@@ -626,7 +569,7 @@ describe("LandingPage", () => {
       expect.objectContaining({ copied: true }),
     );
     expect(useGlobalStore.getState().settings.recentProjects).toEqual([
-      { path: "/copy/project.easl", projectId: copiedId },
+      { path: "/copy/project.easl", projectId: copiedId, name: "Identity Project" },
       { path: "/old/project.easl", projectId: "same-id" },
     ]);
   });
@@ -657,16 +600,6 @@ describe("LandingPage BIDS detection dialogs", () => {
     vi.mocked(open).mockResolvedValue(null);
     vi.mocked(exists).mockResolvedValue(false);
   });
-
-  function renderLanding() {
-    return render(
-      <MantineProvider env="test">
-        <MemoryRouter>
-          <LandingPage />
-        </MemoryRouter>
-      </MantineProvider>,
-    );
-  }
 
   const BASE_BIDS_RESULT = {
     isBids: true,
@@ -721,7 +654,7 @@ describe("LandingPage BIDS detection dialogs", () => {
       if (command === "check_bids_dataset") return BASE_BIDS_RESULT;
       return null;
     });
-    renderLanding();
+    renderPage();
     fireEvent.click(screen.getByTestId("landing-new-project-btn"));
     await screen.findByTestId("bids-detection-dialog");
     fireEvent.click(screen.getByTestId("bids-detection-dialog-skip-radio"));
@@ -787,7 +720,7 @@ describe("LandingPage BIDS detection dialogs", () => {
       }
       return null;
     });
-    renderLanding();
+    renderPage();
     fireEvent.click(screen.getByTestId("landing-new-project-btn"));
     await screen.findByTestId("bids-detection-dialog");
     expect(screen.getByTestId("bids-dataset-name")).toHaveTextContent("test_Oxford_ASL_singlePLD");
@@ -819,7 +752,7 @@ describe("LandingPage BIDS detection dialogs", () => {
       if (command === "check_bids_dataset") return BASE_BIDS_RESULT;
       return null;
     });
-    renderLanding();
+    renderPage();
     fireEvent.click(screen.getByTestId("landing-new-project-btn"));
     await screen.findByTestId("bids-detection-dialog");
     fireEvent.click(screen.getByTestId("bids-detection-dialog-skip-radio"));
@@ -852,7 +785,7 @@ describe("LandingPage BIDS detection dialogs", () => {
       }
       return null;
     });
-    renderLanding();
+    renderPage();
     fireEvent.click(screen.getByTestId("landing-new-project-btn"));
     await screen.findByTestId("bids-no-subjects-dialog");
     expect(preflightProjectSetup).not.toHaveBeenCalled();
@@ -882,7 +815,7 @@ describe("LandingPage BIDS detection dialogs", () => {
       if (command === "check_bids_dataset") return BASE_BIDS_RESULT;
       return null;
     });
-    renderLanding();
+    renderPage();
     fireEvent.click(screen.getByTestId("landing-new-project-btn"));
     await screen.findByTestId("bids-detection-dialog");
     fireEvent.click(screen.getByTestId("bids-detection-dialog-skip-radio"));
@@ -909,7 +842,7 @@ describe("LandingPage BIDS detection dialogs", () => {
       return true;
     });
 
-    renderLanding();
+    renderPage();
     fireEvent.click(screen.getAllByRole("button", { name: /new project/i })[0]);
 
     await waitFor(() => {
@@ -954,7 +887,7 @@ describe("LandingPage BIDS detection dialogs", () => {
       return true;
     });
 
-    renderLanding();
+    renderPage();
     fireEvent.click(screen.getAllByRole("button", { name: /new project/i })[0]);
 
     await waitFor(() => {
@@ -999,7 +932,7 @@ describe("LandingPage BIDS detection dialogs", () => {
       return true;
     });
 
-    renderLanding();
+    renderPage();
     fireEvent.click(screen.getAllByRole("button", { name: /new project/i })[0]);
 
     await waitFor(() => {
@@ -1036,7 +969,7 @@ describe("LandingPage BIDS detection dialogs", () => {
       return true;
     });
 
-    renderLanding();
+    renderPage();
     fireEvent.click(screen.getAllByRole("button", { name: /new project/i })[0]);
 
     await waitFor(() => {
@@ -1062,7 +995,7 @@ describe("LandingPage BIDS detection dialogs", () => {
       return true;
     });
 
-    renderLanding();
+    renderPage();
     fireEvent.click(screen.getAllByRole("button", { name: /new project/i })[0]);
 
     await waitFor(() => {
@@ -1096,7 +1029,7 @@ describe("LandingPage BIDS detection dialogs", () => {
         return true;
       });
 
-      renderLanding();
+      renderPage();
       fireEvent.click(screen.getAllByRole("button", { name: /new project/i })[0]);
 
       await waitFor(() => {
@@ -1130,7 +1063,7 @@ describe("LandingPage BIDS detection dialogs", () => {
       return true;
     });
 
-    renderLanding();
+    renderPage();
     fireEvent.click(screen.getAllByRole("button", { name: /new project/i })[0]);
 
     await waitFor(() => {
@@ -1177,7 +1110,7 @@ describe("LandingPage BIDS detection dialogs", () => {
       return true;
     });
 
-    renderLanding();
+    renderPage();
     fireEvent.click(screen.getAllByRole("button", { name: /new project/i })[0]);
 
     await waitFor(() => {
@@ -1210,13 +1143,7 @@ describe("LandingPage BIDS detection dialogs", () => {
       },
     });
 
-    render(
-      <MantineProvider env="test">
-        <MemoryRouter>
-          <LandingPage />
-        </MemoryRouter>
-      </MantineProvider>,
-    );
+    renderPage();
 
     // Trigger New Project
     fireEvent.click(screen.getAllByRole("button", { name: /new project/i })[0]);
@@ -1254,13 +1181,7 @@ describe("LandingPage BIDS detection dialogs", () => {
       return path === "/tmp/brain-study/project.easl" || path === "/tmp/brain-study";
     });
 
-    render(
-      <MantineProvider env="test">
-        <MemoryRouter>
-          <LandingPage />
-        </MemoryRouter>
-      </MantineProvider>,
-    );
+    renderPage();
 
     // Trigger New Project (uses parent directory)
     fireEvent.click(screen.getAllByRole("button", { name: /new project/i })[0]);

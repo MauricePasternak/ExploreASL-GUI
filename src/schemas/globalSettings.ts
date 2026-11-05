@@ -10,6 +10,7 @@ export const ImportSettingsSchema = z.object({
 export const RecentProjectSchema = z.object({
   path: z.string().trim().min(1),
   projectId: z.string().trim().min(1).optional(),
+  name: z.string().optional(),
 });
 
 const RecentProjectInputSchema = z.union([

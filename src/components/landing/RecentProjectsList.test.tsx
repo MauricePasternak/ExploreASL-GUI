@@ -25,10 +25,11 @@ describe("RecentProjectsList", () => {
     vi.mocked(exists).mockImplementation(async (path) => path === "/tmp/available/project.easl");
   });
 
-  it("renders availability state for recent projects", async () => {
+  it("renders clear actions and removes projects from the recent list", async () => {
+    const onOpen = vi.fn();
     render(
       <MantineProvider env="test">
-        <RecentProjectsList onOpen={() => undefined} />
+        <RecentProjectsList onOpen={onOpen} />
       </MantineProvider>,
     );
 
@@ -36,6 +37,46 @@ describe("RecentProjectsList", () => {
       expect(screen.getByText("Available")).toBeInTheDocument();
       expect(screen.getByText("Moved or deleted")).toBeInTheDocument();
       expect(screen.getByText("available")).toBeInTheDocument();
+    });
+
+    const open = screen.getByRole("button", { name: "Open available" });
+    const remove = screen.getByRole("button", { name: "Remove available from recent projects" });
+    const availableIcon = screen.getByTestId(
+      "recent-project-status-icon--tmp-available-project-easl",
+    );
+    const missingIcon = screen.getByTestId("recent-project-status-icon--tmp-missing-project-easl");
+    expect(availableIcon).toHaveClass("tabler-icon-check");
+    expect(availableIcon).toHaveAttribute(
+      "stroke",
+      "light-dark(var(--mantine-color-green-8), var(--mantine-color-green-4))",
+    );
+    expect(missingIcon).toHaveClass("tabler-icon-x");
+    expect(missingIcon).toHaveAttribute(
+      "stroke",
+      "light-dark(var(--mantine-color-red-8), var(--mantine-color-red-4))",
+    );
+    expect(open).toHaveTextContent("Open");
+    expect(remove).toHaveTextContent("Remove from list");
+    expect(open).toHaveStyle("--button-bg: var(--mantine-color-blue-8)");
+    expect(remove).toHaveStyle("--button-bg: var(--mantine-color-red-8)");
+    expect(screen.getByTestId("recent-open-icon--tmp-available-project-easl")).toHaveClass(
+      "tabler-icon-folder-open",
+    );
+    expect(screen.getByTestId("recent-remove-icon--tmp-available-project-easl")).toHaveClass(
+      "tabler-icon-trash",
+    );
+    expect(remove).toHaveAttribute(
+      "title",
+      "Remove from this list only. Project files stay unchanged.",
+    );
+    fireEvent.click(open);
+    expect(onOpen).toHaveBeenCalledExactlyOnceWith("/tmp/available/project.easl");
+    fireEvent.click(remove);
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: "Open available" })).not.toBeInTheDocument();
+      expect(useGlobalStore.getState().settings.recentProjects).toEqual([
+        { path: "/tmp/missing/project.easl", projectId: "missing" },
+      ]);
     });
   });
 

@@ -30,7 +30,7 @@ import {
   IconSettings,
   IconUpload,
 } from "@tabler/icons-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
@@ -43,6 +43,7 @@ import { logAction } from "../lib/debug";
 import { showErrorNotification } from "../lib/errorNotifications";
 import { ProjectStorageError, projectStorageErrorMessage } from "../lib/projectPersistence";
 import ProcessingStatusBar from "./processing/ProcessingStatusBar";
+import ProjectName from "./ProjectName";
 
 const PHASE_NAV = [
   { phase: "import", label: "Import", icon: IconUpload },
@@ -87,9 +88,38 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
   const closeProject = useProjectStore((state) => state.closeProject);
   const navigate = useNavigate();
   const location = useLocation();
+  const mainRef = useRef<HTMLElement>(null);
+  const pageRef = useRef<HTMLDivElement>(null);
+  const projectNameInput = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const main = mainRef.current;
+    const page = pageRef.current;
+    if (!main || !page) return;
+    // WebKit can retain an out-of-range offset after content shrinks or the viewport grows.
+    const resizeObserver = new ResizeObserver(() => {
+      const maxScrollTop = Math.max(0, main.scrollHeight - main.clientHeight);
+      if (main.scrollTop > maxScrollTop) main.scrollTop = maxScrollTop;
+    });
+    const observeContent = () => {
+      resizeObserver.disconnect();
+      resizeObserver.observe(main);
+      resizeObserver.observe(page);
+      // The full-height wrapper can overflow without resizing; watch its route roots too.
+      for (const child of page.children) resizeObserver.observe(child);
+    };
+    observeContent();
+    const contentObserver = new MutationObserver(observeContent);
+    contentObserver.observe(page, { childList: true });
+    return () => {
+      contentObserver.disconnect();
+      resizeObserver.disconnect();
+    };
+  }, [location.pathname]);
 
   const saveNow = useCallback(async () => {
     if (!project) return;
+    projectNameInput.current?.blur();
     try {
       await saveProject();
       notifications.show({
@@ -165,6 +195,7 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
           }
           closing = true;
           try {
+            projectNameInput.current?.blur();
             if (currentProject) await useProjectStore.getState().closeProject();
             await appWindow.destroy();
           } catch (error) {
@@ -216,6 +247,14 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
     }
 
     logAction("layout_navigate_phase", { phase });
+    projectNameInput.current?.blur();
+    await useProjectStore.getState().flushEdits();
+    const current = useProjectStore.getState().project;
+    if (
+      current?.activationGeneration !== project.activationGeneration ||
+      current.projectMeta.id !== project.projectMeta.id
+    )
+      return;
     await setPhase(phase);
     await saveProject();
     navigate(`/project/${project.projectMeta.id}/${phase}`);
@@ -224,6 +263,7 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
   async function leaveProject() {
     logAction("layout_leave_project");
     try {
+      projectNameInput.current?.blur();
       await closeProject();
       setLeaveModalOpen(false);
       if (leaveTarget === "exit") {
@@ -261,6 +301,7 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
 
     logAction("layout_return_home");
     try {
+      projectNameInput.current?.blur();
       await closeProject();
       closeMobileNav();
       navigate("/");
@@ -280,9 +321,15 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
       }}
       padding="md"
     >
-      <AppShell.Header>
-        <Group h="100%" px="md" justify="space-between">
-          <Group gap="sm">
+      <AppShell.Header data-testid="layout-header">
+        <Group
+          h="100%"
+          px="md"
+          justify="space-between"
+          wrap="nowrap"
+          data-testid="layout-header-content"
+        >
+          <Group gap="sm" wrap="nowrap" miw={0} data-testid="layout-header-identity">
             {project ? (
               <Burger
                 opened={opened}
@@ -292,11 +339,26 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
                 data-testid="layout-mobile-nav-toggle"
               />
             ) : null}
-            <Image src={appLogo} alt="ExploreASL GUI" h={32} w={32} style={{ flexShrink: 0 }} />
-            {project ? <Text c="dimmed">{project.projectMeta.name}</Text> : null}
+            <Image
+              src={appLogo}
+              alt="ExploreASL GUI"
+              h={32}
+              w={32}
+              style={{ flexShrink: 0 }}
+              data-testid="layout-logo"
+            />
+            {project ? (
+              <ProjectName
+                key={`${project.projectMeta.id}:${project.activationGeneration}`}
+                name={project.projectMeta.name}
+                projectId={project.projectMeta.id}
+                generation={project.activationGeneration}
+                inputRef={projectNameInput}
+              />
+            ) : null}
           </Group>
 
-          <Group gap="sm">
+          <Group gap="sm" wrap="nowrap" data-testid="layout-header-actions">
             {project ? (
               <Badge variant="light" color="blue" data-testid="layout-phase-badge">
                 {project.projectMeta.currentPhase}
@@ -394,7 +456,7 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
                     disabled={disabled}
                     label={navbarCollapsed ? undefined : label}
                     leftSection={<Icon size={18} />}
-                    onClick={() => void handlePhaseNavigation(phase)}
+                    onClick={() => void handlePhaseNavigation(phase).catch(() => undefined)}
                     data-testid={`layout-nav-${phase}`}
                   />
                 );
@@ -436,13 +498,16 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
         <AppShell.Footer data-testid="layout-footer">
           <Group h="100%" px="md" justify="space-between" data-testid="layout-footer-content">
             <ProcessingStatusBar />
-            <Text size="sm">Project: {project.projectMeta.name}</Text>
+            <Text size="sm" data-testid="layout-footer-project-name">
+              Project: {project.projectMeta.name}
+            </Text>
             <Text size="sm">Subjects: {subjectCount}</Text>
           </Group>
         </AppShell.Footer>
       ) : null}
 
       <AppShell.Main
+        ref={mainRef}
         mt="var(--app-shell-header-offset, 0px)"
         pt="md"
         pb="md"
@@ -502,6 +567,7 @@ export default function Layout({ onOpenSettings }: LayoutProps) {
         </Modal>
         <div
           key={location.pathname}
+          ref={pageRef}
           className="page-fade-container"
           data-testid="page-fade-container"
         >

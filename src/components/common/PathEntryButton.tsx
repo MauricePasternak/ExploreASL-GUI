@@ -1,7 +1,7 @@
 import { Button, Group, Modal, Stack, Text, TextInput } from "@mantine/core";
 import { useFocusReturn } from "@mantine/hooks";
 import { exists } from "@tauri-apps/plugin-fs";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { isAbsolutePath } from "../../lib/projectPaths";
 
 interface PathEntryButtonProps {
@@ -12,6 +12,7 @@ interface PathEntryButtonProps {
   save?: boolean;
   disabled?: boolean;
   onSelect: (path: string) => Promise<void>;
+  renderTrigger?: (open: () => void) => ReactNode;
 }
 
 /** Manual alternative to native choosers; callers retain their normal validation. */
@@ -23,6 +24,7 @@ export default function PathEntryButton({
   save = false,
   disabled = false,
   onSelect,
+  renderTrigger,
 }: PathEntryButtonProps) {
   const [opened, setOpened] = useState(false);
   const [path, setPath] = useState(defaultPath);
@@ -30,6 +32,14 @@ export default function PathEntryButton({
   const [error, setError] = useState<string | null>(null);
   const [replace, setReplace] = useState(false);
   useFocusReturn({ opened });
+
+  function openDialog() {
+    if (disabled || busy) return;
+    setPath(defaultPath);
+    setError(null);
+    setReplace(false);
+    setOpened(true);
+  }
 
   async function submit() {
     if (busy || disabled) return;
@@ -64,21 +74,20 @@ export default function PathEntryButton({
 
   return (
     <>
-      <Button
-        variant="subtle"
-        size="sm"
-        disabled={disabled}
-        aria-label={`${title} by path`}
-        data-testid={testId}
-        onClick={() => {
-          setPath(defaultPath);
-          setError(null);
-          setReplace(false);
-          setOpened(true);
-        }}
-      >
-        Enter path…
-      </Button>
+      {renderTrigger ? (
+        renderTrigger(openDialog)
+      ) : (
+        <Button
+          variant="subtle"
+          size="sm"
+          disabled={disabled}
+          aria-label={`${title} by path`}
+          data-testid={testId}
+          onClick={openDialog}
+        >
+          Enter path…
+        </Button>
+      )}
       {opened && (
         <Modal
           opened={opened}
@@ -102,7 +111,7 @@ export default function PathEntryButton({
             <Stack data-testid={`${testId}-fields`}>
               <TextInput
                 label="Absolute path"
-                description="Use a filesystem path, not a file URL."
+                description="Full filepaths only, no URLs or relative paths."
                 data-autofocus
                 data-testid={`${testId}-input`}
                 maxLength={4096}

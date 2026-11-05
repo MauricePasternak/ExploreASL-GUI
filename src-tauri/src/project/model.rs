@@ -870,6 +870,9 @@ pub struct UiState {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub enum ProjectEdit {
+    RenameProject {
+        name: String,
+    },
     Import {
         mapping: MappingState,
         preferences: ImportPreferences,

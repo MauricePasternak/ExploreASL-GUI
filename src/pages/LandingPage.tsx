@@ -2,8 +2,28 @@ import { useEffect, useRef, useState } from "react";
 import { commands, unwrap } from "../lib/ipc";
 import type { BidsCheckResult_Serialize as BidsCheckResult } from "../generated/bindings";
 import { notifications } from "@mantine/notifications";
-import { Button, Divider, Group, Image, Modal, Radio, Stack, Text, Alert } from "@mantine/core";
-import { IconAlertTriangle, IconFolderOpen, IconPlus } from "@tabler/icons-react";
+import {
+  ActionIcon,
+  Alert,
+  Button,
+  Group,
+  Image,
+  Menu,
+  Modal,
+  Paper,
+  Radio,
+  Stack,
+  Text,
+  ThemeIcon,
+  Title,
+} from "@mantine/core";
+import {
+  IconAlertTriangle,
+  IconChevronDown,
+  IconFolderOpen,
+  IconKeyboard,
+  IconPlus,
+} from "@tabler/icons-react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { exists } from "@tauri-apps/plugin-fs";
 import { homeDir } from "@tauri-apps/api/path";
@@ -23,6 +43,28 @@ import { ProjectStorageError, projectStorageErrorMessage } from "../lib/projectP
 import appLogo from "../../src-tauri/icons/easl_gui_logo.png";
 import { resolveProjectIdentity, type DuplicateProjectChoice } from "../lib/projectIdentity";
 import { SetupCommandErrorSchema, type SetupPlan } from "../lib/bids/setup";
+import "./LandingPage.css";
+
+const PROJECT_ACTIONS = [
+  {
+    id: "new",
+    title: "New project",
+    description: "Start with DICOM data or an existing BIDS dataset.",
+    browse: "Choose folder",
+    manual: "Enter folder path…",
+    pathTitle: "Select project root directory",
+    icon: IconPlus,
+  },
+  {
+    id: "open",
+    title: "Open project",
+    description: "Continue working with a saved ExploreASL GUI project.",
+    browse: "Choose project file",
+    manual: "Enter project file path…",
+    pathTitle: "Select project file",
+    icon: IconFolderOpen,
+  },
+] as const;
 
 type BidsDialogState =
   | null
@@ -55,6 +97,7 @@ export default function LandingPage({ onOpenSettings: onOpenSettingsProp }: Land
   const outletContext = useOutletContext<LayoutOutletContext | undefined>();
   const onOpenSettings = onOpenSettingsProp ?? outletContext?.onOpenSettings ?? (() => {});
   const [loading, setLoading] = useState(false);
+  const menuTargets = useRef<Record<string, HTMLButtonElement | null>>({});
   const createProject = useProjectStore((state) => state.createProject);
   const preflightProjectSetup = useProjectStore((state) => state.preflightProjectSetup);
   const loadProject = useProjectStore((state) => state.loadProject);
@@ -98,7 +141,7 @@ export default function LandingPage({ onOpenSettings: onOpenSettingsProp }: Land
       ...(planId === undefined ? {} : { planId }),
     });
     const project = useProjectStore.getState().project;
-    addRecentProject(projectPath, project?.projectMeta.id);
+    addRecentProject(projectPath, project?.projectMeta.id, project?.projectMeta.name);
     logAction("landing_new_project_created", { path: selected, name: projectName, dataSource });
 
     if (project) {
@@ -169,8 +212,13 @@ export default function LandingPage({ onOpenSettings: onOpenSettingsProp }: Land
     const openedProject = useProjectStore.getState().project;
     if (openedProject) {
       if (resolution.replacePath)
-        replaceRecentProject(resolution.replacePath, path, openedProject.projectMeta.id);
-      else addRecentProject(path, openedProject.projectMeta.id);
+        replaceRecentProject(
+          resolution.replacePath,
+          path,
+          openedProject.projectMeta.id,
+          openedProject.projectMeta.name,
+        );
+      else addRecentProject(path, openedProject.projectMeta.id, openedProject.projectMeta.name);
     }
     return openedProject !== null;
   }
@@ -547,7 +595,7 @@ export default function LandingPage({ onOpenSettings: onOpenSettingsProp }: Land
     try {
       await confirmRecovery();
       const project = useProjectStore.getState().project;
-      addRecentProject(recoveryPath, project?.projectMeta.id);
+      addRecentProject(recoveryPath, project?.projectMeta.id, project?.projectMeta.name);
       if (project)
         navigate(`/project/${project.projectMeta.id}/${project.projectMeta.currentPhase}`);
     } catch (error) {
@@ -568,102 +616,22 @@ export default function LandingPage({ onOpenSettings: onOpenSettingsProp }: Land
   }
 
   return (
-    <div
-      data-testid="landing-page"
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        /* Break out of AppShell.Main padding on all four sides */
-        margin: "calc(-1 * var(--app-shell-padding))",
-      }}
-    >
-      {/* Keyframe animation injected once */}
-      <style>{`
-        @keyframes bloodFlow {
-          0%   { background-position: 50% 0% }
-          50%  { background-position: 50% 100% }
-          100% { background-position: 50% 0% }
-        }
-        .hero-gradient {
-          background: linear-gradient(
-            180deg,
-            #f0d6db 0%,
-            #e2d0e8 25%,
-            #c8d9ee 50%,
-            #d0e6f5 75%,
-            #c5ddf7 100%
-          );
-          background-size: 100% 300%;
-          animation: bloodFlow 10s ease-in-out infinite;
-        }
-      `}</style>
-
-      {/* Full-bleed hero — breaks out of any parent padding via negative margin trick */}
-      <div
-        className="hero-gradient"
-        data-testid="landing-hero"
-        style={{ padding: "48px 32px 56px" }}
-      >
-        {/* Inner content stays centred with a max-width cap */}
-        <div
-          data-testid="landing-hero-content"
-          style={{
-            maxWidth: 720,
-            margin: "0 auto",
-            display: "flex",
-            alignItems: "center",
-            gap: 32,
-          }}
-        >
-          <Image
-            src={appLogo}
-            alt="ExploreASL Logo"
-            w={120}
-            h={120}
-            style={{ flexShrink: 0, filter: "drop-shadow(0 2px 8px rgba(0,0,0,0.15))" }}
-            data-testid="landing-logo"
-          />
+    <div className="landing-page" data-testid="landing-page">
+      <header className="landing-hero" data-testid="landing-hero">
+        <div className="landing-hero-content" data-testid="landing-hero-content">
+          <Image src={appLogo} alt="ExploreASL Logo" data-testid="landing-logo" />
           <div data-testid="landing-hero-text-container">
-            <Text
-              component="h1"
-              data-testid="landing-hero-title"
-              style={{
-                fontSize: "2.6rem",
-                fontWeight: 900,
-                color: "#1a2a4a",
-                lineHeight: 1.1,
-                margin: 0,
-              }}
-            >
+            <Title order={1} data-testid="landing-hero-title">
               Welcome to ExploreASL
-            </Text>
-            <Text
-              mt="sm"
-              data-testid="landing-hero-subtitle"
-              style={{
-                color: "#3a4f6e",
-                fontSize: "1rem",
-                maxWidth: 400,
-              }}
-            >
-              A graphical interface for the ExploreASL arterial spin labeling MRI pipeline.
+            </Title>
+            <Text data-testid="landing-hero-subtitle">
+              Your workspace for arterial spin labeling MRI.
             </Text>
           </div>
         </div>
-      </div>
+      </header>
 
-      {/* Page body */}
-      <div
-        data-testid="landing-body-container"
-        style={{
-          flex: 1,
-          padding: "var(--mantine-spacing-xl) var(--app-shell-padding)",
-          maxWidth: 960,
-          marginLeft: "auto",
-          marginRight: "auto",
-          width: "100%",
-        }}
-      >
+      <div className="landing-body" data-testid="landing-body-container">
         <Stack gap="xl" data-testid="landing-body-stack">
           {showWelcomeCard ? (
             <WelcomeCard onOpenSettings={onOpenSettings} />
@@ -680,55 +648,126 @@ export default function LandingPage({ onOpenSettings: onOpenSettingsProp }: Land
                 </Alert>
               ) : null}
 
-              {/* Action Buttons — centred */}
-              <Group justify="center" data-testid="landing-actions-group">
-                <Button
-                  size="lg"
-                  leftSection={<IconPlus size={20} />}
-                  loading={loading}
-                  disabled={projectActionsDisabled}
-                  onClick={() => void handleNewProject()}
-                  data-testid="landing-new-project-btn"
-                >
-                  New Project
-                </Button>
-                <PathEntryButton
-                  title="Select project root directory"
-                  testId="landing-new-project-path"
-                  disabled={projectActionsDisabled || loading}
-                  onSelect={handleNewProject}
-                />
-                <Button
-                  size="lg"
-                  variant="outline"
-                  leftSection={<IconFolderOpen size={20} />}
-                  loading={loading}
-                  disabled={projectActionsDisabled}
-                  onClick={() => void handleOpenProject()}
-                  data-testid="landing-open-project-btn"
-                >
-                  Open Project
-                </Button>
-                <PathEntryButton
-                  title="Select project file"
-                  testId="landing-open-project-path"
-                  extensions={["easl"]}
-                  disabled={projectActionsDisabled || loading}
-                  onSelect={handleOpenProject}
-                />
-              </Group>
+              <section
+                className="landing-actions"
+                aria-label="Create or open a project"
+                data-testid="landing-actions-group"
+              >
+                {PROJECT_ACTIONS.map((action) => {
+                  const Icon = action.icon;
+                  const onSelect = action.id === "new" ? handleNewProject : handleOpenProject;
+                  const variant = action.id === "new" ? "filled" : "default";
+                  return (
+                    <Paper
+                      component="article"
+                      withBorder
+                      radius="md"
+                      className="landing-action-card"
+                      key={action.id}
+                      data-testid={`landing-${action.id}-project-card`}
+                    >
+                      <ThemeIcon
+                        variant="light"
+                        size={44}
+                        radius="md"
+                        data-testid={`landing-${action.id}-project-icon`}
+                      >
+                        <Icon size={23} stroke={1.7} aria-hidden="true" />
+                      </ThemeIcon>
+                      <Title order={2} data-testid={`landing-${action.id}-project-heading`}>
+                        {action.title}
+                      </Title>
+                      <Text size="sm" data-testid={`landing-${action.id}-project-description`}>
+                        {action.description}
+                      </Text>
+                      <div
+                        className="landing-split"
+                        role="group"
+                        aria-label={`${action.title} options`}
+                        data-testid={`landing-${action.id}-project-options`}
+                      >
+                        <Button
+                          size="md"
+                          radius="md"
+                          variant={variant}
+                          className="landing-browse"
+                          leftSection={<IconFolderOpen size={18} aria-hidden="true" />}
+                          loading={loading}
+                          disabled={projectActionsDisabled}
+                          aria-label={`${action.title}: ${action.browse.toLowerCase()}`}
+                          onClick={() => void onSelect()}
+                          data-testid={`landing-${action.id}-project-btn`}
+                        >
+                          {action.browse}
+                        </Button>
+                        <PathEntryButton
+                          title={action.pathTitle}
+                          testId={`landing-${action.id}-project-path`}
+                          extensions={action.id === "open" ? ["easl"] : undefined}
+                          disabled={projectActionsDisabled || loading}
+                          onSelect={onSelect}
+                          renderTrigger={(openPath) => (
+                            <Menu position="bottom-end" withinPortal>
+                              <Menu.Target>
+                                <ActionIcon
+                                  ref={(node) => {
+                                    menuTargets.current[action.id] = node;
+                                  }}
+                                  size={44}
+                                  radius="md"
+                                  variant={variant}
+                                  className="landing-more"
+                                  disabled={projectActionsDisabled || loading}
+                                  aria-label={`More ways to ${action.id === "new" ? "create" : "open"} a project`}
+                                  title={action.manual}
+                                  data-testid={`landing-${action.id}-project-more`}
+                                >
+                                  <IconChevronDown size={18} aria-hidden="true" />
+                                </ActionIcon>
+                              </Menu.Target>
+                              <Menu.Dropdown data-testid={`landing-${action.id}-project-menu`}>
+                                <Menu.Item
+                                  leftSection={<IconKeyboard size={17} aria-hidden="true" />}
+                                  disabled={projectActionsDisabled || loading}
+                                  onClick={() => {
+                                    // Return to the persistent trigger, not an unmounted menu item.
+                                    menuTargets.current[action.id]?.focus();
+                                    openPath();
+                                  }}
+                                  data-testid={`landing-${action.id}-project-path`}
+                                >
+                                  {action.manual}
+                                </Menu.Item>
+                              </Menu.Dropdown>
+                            </Menu>
+                          )}
+                        />
+                      </div>
+                    </Paper>
+                  );
+                })}
+              </section>
 
-              <Divider
-                label="Recent Projects"
-                labelPosition="center"
-                data-testid="landing-recent-projects-divider"
-              />
-
-              <RecentProjectsList
-                onOpen={handleOpenRecent}
-                disabled={projectActionsDisabled}
-                data-testid="landing-recent-projects-list"
-              />
+              <section
+                className="landing-recent"
+                aria-labelledby="landing-recent-title"
+                data-testid="landing-recent-projects"
+              >
+                <Title
+                  order={2}
+                  size="h4"
+                  id="landing-recent-title"
+                  mb="sm"
+                  data-testid="landing-recent-projects-title"
+                >
+                  Recent projects
+                </Title>
+                <RecentProjectsList
+                  onOpen={handleOpenRecent}
+                  disabled={projectActionsDisabled || loading}
+                  data-testid="landing-recent-projects-list"
+                />
+              </section>
             </>
           )}
         </Stack>

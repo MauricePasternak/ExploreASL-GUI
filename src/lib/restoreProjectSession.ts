@@ -39,7 +39,9 @@ export async function tryRestoreProjectSession(id: string): Promise<boolean> {
       if (inspection.projectId !== id) continue;
       await useProjectStore.getState().loadProject(path, { inspection });
       if (!useProjectStore.getState().recovery)
-        useGlobalStore.getState().addRecentProject(path, id);
+        useGlobalStore
+          .getState()
+          .addRecentProject(path, id, useProjectStore.getState().project?.projectMeta.name);
       return true;
     } catch {
       /* Unavailable candidates do not replace the active project. */

@@ -6,6 +6,58 @@ Define project persistence, phase access, and shared project state.
 
 ## Requirements
 
+### Requirement: Inline project display-name rename
+
+The header SHALL support inline display-name editing through an accessible pencil button. Native acceptance SHALL validate rename submissions and change only `projectMeta.name`, using shared autosave. Renaming SHALL preserve project identity, paths, scientific data, and independent results. Recent Projects SHALL cache persisted names for display only. Existing projects SHALL remain openable without migration or automatic name normalization.
+
+#### Scenario: Inline editor is opened
+
+- **WHEN** the user activates the always-visible pencil beside the header name
+- **THEN** the name SHALL become a focused single-line textfield with its current value selected, without a dialog, helper text, or confirmation
+- **AND** header identity elements and rename controls SHALL expose stable `data-testid` attributes
+
+#### Scenario: Header rename persists
+
+- **WHEN** a user edits the header name and moves focus away
+- **THEN** native acceptance SHALL update header/footer once, shared autosave SHALL persist it, and reopening SHALL retain the name
+- **AND** Save, phase navigation, and ordinary close SHALL submit the header draft before flushing
+
+#### Scenario: Rename is cancelled or unchanged
+
+- **WHEN** Enter submits editing and focus then leaves the textfield
+- **THEN** the changed name SHALL be submitted exactly once
+- **WHEN** Escape cancels editing or the submitted trimmed name equals the accepted name
+- **THEN** the accepted name and revisions SHALL remain unchanged and no rename edit or save SHALL be scheduled
+- **AND** cancelling an invalid rename SHALL clear its draft-only unsaved status without clearing genuine storage failures or unrelated invalid drafts
+
+#### Scenario: Rename submission validation
+
+- **WHEN** a name is submitted through the renderer or native edit boundary
+- **THEN** blank names, control characters, and Unicode line/paragraph separators SHALL be rejected
+- **AND** surrounding whitespace SHALL be trimmed while Unicode, internal spaces, punctuation, and duplicate display names remain supported
+
+#### Scenario: Rename fails or project changes
+
+- **WHEN** validation or native acceptance rejects a rename
+- **THEN** its draft and accessible error SHALL remain visible without changing the accepted name, and Save or leaving SHALL be blocked until correction or cancellation
+- **WHEN** a different project becomes active before a rename response arrives
+- **THEN** the old editor SHALL be discarded and that response SHALL NOT change the replacement project's configuration or editor
+
+#### Scenario: Rename coexists with active work
+
+- **WHEN** a user renames during import or processing
+- **THEN** work SHALL continue uninterrupted and independently accepted results SHALL survive saving alongside the name
+- **AND** UUID, project root, filename, source data, BIDS metadata, mappings, parameters, and reviews SHALL remain unchanged
+
+#### Scenario: Recent name refresh and save failure
+
+- **WHEN** a project opens or saves successfully
+- **THEN** its optional last-known name SHALL refresh in Recent Projects, with the unchanged path underneath
+- **AND** name-only cache refresh SHALL preserve existing order; opening a project SHALL retain normal most-recently-used promotion
+- **AND** older entries without cached names SHALL fall back to folder-derived labels
+- **WHEN** saving a rename fails
+- **THEN** shared unsaved/error status and retry SHALL apply, and Recent Projects SHALL NOT publish the unpersisted name
+
 ### Requirement: Project gating on valid profiles
 
 The project store's `createProject` and `loadProject` actions SHALL check that at least one valid execution profile exists before proceeding. Validity SHALL be determined from the global store's `profileValidationState`.

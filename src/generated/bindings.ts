@@ -1610,6 +1610,7 @@ export type ProjectEdit = ProjectEdit_Serialize | ProjectEdit_Deserialize;
  *  successful baselines, source kind and schema version are not user edits.
  */
 export type ProjectEdit_Deserialize =
+  | { kind: "renameProject"; name: string }
   | {
       kind: "import";
       mapping: MappingState_Deserialize;
@@ -1646,6 +1647,7 @@ export type ProjectEdit_Deserialize =
  *  successful baselines, source kind and schema version are not user edits.
  */
 export type ProjectEdit_Serialize =
+  | { kind: "renameProject"; name: string }
   | { kind: "import"; mapping: MappingState_Serialize; preferences: ImportPreferences_Serialize }
   | { kind: "parameters"; values: DataPar_Serialize; visibility: AdvancedVisibility_Serialize }
   | { kind: "processing"; config: ProcessingConfig_Serialize }

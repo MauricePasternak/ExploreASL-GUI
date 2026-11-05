@@ -35,6 +35,7 @@ import {
   registerProjectTask,
 } from "../lib/projectLifecycle";
 import { closeProjectRuntime, transitionProjectRuntime } from "../lib/projectCoordinator";
+import { projectEaslPath } from "../lib/sessionCheckpoint";
 import { useGlobalStore } from "./globalStore";
 import { useImportStore } from "./importStore";
 
@@ -53,6 +54,7 @@ interface ProjectState {
   recovery: (ProjectInspection & { easlPath: string; copied: boolean }) | null;
   acceptSnapshot: (snapshot: ProjectSnapshot) => void;
   submitEdit: (edit: ProjectEdit | EditFactory) => Promise<void>;
+  discardRejectedEdit: (edit: Promise<void>) => void;
   setDraftError: (field: string, error: string | null) => void;
   flushEdits: () => Promise<void>;
   cancelAutosave: () => void;
@@ -76,6 +78,7 @@ interface ProjectState {
   ) => Promise<SetupPlan>;
   saveProject: (options?: { allowClosedAdmission?: boolean }) => Promise<void>;
   closeProject: () => Promise<void>;
+  renameProject: (name: string) => Promise<void>;
   setPhase: (phase: ProjectPhase) => Promise<void>;
   toggleNavbar: () => Promise<void>;
   addReviewer: () => Promise<void>;
@@ -152,6 +155,14 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         get().pendingEdits > 0 ||
         Object.keys(get().draftErrors).length > 0,
     });
+    if (snapshot.acceptedRevision === snapshot.persistedRevision && !snapshot.recoveredFromBackup)
+      useGlobalStore
+        .getState()
+        .updateRecentProjectName(
+          projectEaslPath(snapshot.rootPath),
+          snapshot.document.projectMeta.id,
+          snapshot.document.projectMeta.name,
+        );
   },
   setDraftError: (field, error) => {
     const errors = { ...get().draftErrors };
@@ -161,6 +172,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     set({
       draftErrors: errors,
       isDirty:
+        Boolean(get().saveError) ||
         Object.keys(errors).length > 0 ||
         get().pendingEdits > 0 ||
         Boolean(
@@ -205,8 +217,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
           }, 2000);
         }
       } catch (error) {
-        if (isCurrentProjectLease(lease)) set({ saveError: failure(error), isDirty: true });
-        throw error;
+        if (isCurrentProjectLease(lease)) {
+          set({ saveError: failure(error), isDirty: true });
+          throw error;
+        }
       } finally {
         if (isCurrentProjectLease(lease)) {
           const pendingEdits = get().pendingEdits - 1;
@@ -229,6 +243,12 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     submissions = operation;
     return operation;
   },
+  discardRejectedEdit: (edit) => {
+    // Cancelling a rejected form must not acknowledge a newer edit's failure.
+    if (submissions !== edit || get().pendingEdits > 0) return;
+    submissions = Promise.resolve();
+    set({ saveError: null });
+  },
   flushEdits: async () => {
     let pending: Promise<void>;
     do {
@@ -245,10 +265,12 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       throw new Error("Project transition is in progress; save was not admitted.");
     get().cancelAutosave();
     set({ saving: true });
+    let writeStarted = false;
     try {
       await get().flushEdits();
       const project = get().project;
       if (!project || !lease || !isCurrentProjectLease(lease)) return;
+      writeStarted = true;
       const saved = await saveNativeProject(project.activationGeneration);
       if (isCurrentProjectLease(lease)) {
         get().acceptSnapshot(saved);
@@ -256,7 +278,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       }
     } catch (error) {
       if (lease && isCurrentProjectLease(lease)) {
-        set({ saveError: failure(error), isDirty: true });
+        // Draft failures stay field-owned and must not replace an actual save failure.
+        set({ saveError: writeStarted ? failure(error) : get().saveError, isDirty: true });
         showErrorNotification({
           id: `project-save:${lease.projectId}`,
           title: "Project not saved",
@@ -329,6 +352,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       );
   },
   closeProject: () => closeProjectRuntime(),
+  renameProject: (name) => get().submitEdit({ kind: "renameProject", name }),
   setPhase: (phase) => get().submitEdit({ kind: "phase", phase }),
   toggleNavbar: () =>
     get().submitEdit((project) => ({

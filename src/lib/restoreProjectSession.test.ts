@@ -106,6 +106,7 @@ describe("restoreProjectSession", () => {
     expect(useGlobalStore.getState().settings.recentProjects[0]).toEqual({
       path: "/tmp/brain-study/project.easl",
       projectId: "project-1",
+      name: "Brain Study",
     });
   });
 

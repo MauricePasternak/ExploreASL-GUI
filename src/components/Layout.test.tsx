@@ -311,7 +311,9 @@ describe("Layout", () => {
     ).toEqual([
       ["accept_project_edit", { generation: 1, edit: { kind: "phase", phase: "import" } }],
     ]);
-    finishSave();
+    await act(async () => {
+      finishSave();
+    });
     await waitFor(() => expect(screen.queryByTestId("data-par-editor")).not.toBeInTheDocument());
   });
 

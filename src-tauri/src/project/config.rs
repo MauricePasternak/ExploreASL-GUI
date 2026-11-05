@@ -765,6 +765,18 @@ fn apply_edit(document: &mut ProjectDocument, root: &Path, edit: ProjectEdit) ->
             }
             document.project_meta.current_phase = phase;
         }
+        ProjectEdit::RenameProject { name } => {
+            if name.chars().any(|character| {
+                character.is_control() || matches!(character, '\u{2028}' | '\u{2029}')
+            }) {
+                bail!("Project name must be a single line without control characters");
+            }
+            let name = name.trim();
+            if name.is_empty() {
+                bail!("Project name cannot be blank");
+            }
+            document.project_meta.name = name.to_owned();
+        }
         ProjectEdit::Navbar { collapsed } => document.ui_state.navbar_collapsed = Some(collapsed),
         ProjectEdit::AddReviewer => {
             let manifest = &mut document.ui_state.manifest;

@@ -10,6 +10,7 @@ import {
   DEFAULT_SETTINGS,
   GlobalSettingsSchema,
   type GlobalSettings,
+  type RecentProject,
   RecentProjectsSchema,
 } from "../schemas/globalSettings";
 
@@ -35,8 +36,14 @@ interface GlobalState {
   setTheme: (theme: "light" | "dark") => void;
   setTokenSubDelimiters: (delimiters: string[]) => void;
   setPreserveStagingDir: (preserve: boolean) => void;
-  addRecentProject: (path: string, projectId?: string) => void;
-  replaceRecentProject: (oldPath: string, newPath: string, projectId: string) => void;
+  addRecentProject: (path: string, projectId?: string, name?: string) => void;
+  replaceRecentProject: (
+    oldPath: string,
+    newPath: string,
+    projectId: string,
+    name?: string,
+  ) => void;
+  updateRecentProjectName: (path: string, projectId: string, name: string) => void;
   removeRecentProject: (path: string) => void;
 }
 
@@ -379,16 +386,18 @@ export const useGlobalStore = create<GlobalState>((set, get) => ({
     }));
   },
 
-  addRecentProject: (path, projectId) => {
+  addRecentProject: (path, projectId, name) => {
     set((state) => ({
       settings: {
         ...state.settings,
         recentProjects: [
           {
+            ...state.settings.recentProjects.find((item) => item.path === path),
             path,
             projectId:
               projectId ??
               state.settings.recentProjects.find((item) => item.path === path)?.projectId,
+            ...(name === undefined ? {} : { name }),
           },
           ...state.settings.recentProjects.filter((item) => item.path !== path),
         ].slice(0, 20),
@@ -401,12 +410,17 @@ export const useGlobalStore = create<GlobalState>((set, get) => ({
       });
   },
 
-  replaceRecentProject: (oldPath, newPath, projectId) => {
+  replaceRecentProject: (oldPath, newPath, projectId, name) => {
     set((state) => ({
       settings: {
         ...state.settings,
         recentProjects: [
-          { path: newPath, projectId },
+          {
+            ...state.settings.recentProjects.find((item) => item.path === oldPath),
+            path: newPath,
+            projectId,
+            ...(name === undefined ? {} : { name }),
+          },
           ...state.settings.recentProjects.filter(
             (item) => item.path !== oldPath && item.path !== newPath,
           ),
@@ -417,6 +431,27 @@ export const useGlobalStore = create<GlobalState>((set, get) => ({
       .saveSettings()
       .catch((err) => {
         console.error("[globalStore] Failed to save settings:", err);
+      });
+  },
+
+  updateRecentProjectName: (path, projectId, name) => {
+    const recentProjects = get().settings.recentProjects;
+    const normalizedPath = path.replace(/\\/g, "/");
+    const matches = (item: RecentProject) =>
+      item.projectId === projectId || item.path.replace(/\\/g, "/") === normalizedPath;
+    if (!recentProjects.some((item) => matches(item) && item.name !== name)) return;
+    set((state) => ({
+      settings: {
+        ...state.settings,
+        recentProjects: state.settings.recentProjects.map((item) =>
+          matches(item) ? { ...item, projectId, name } : item,
+        ),
+      },
+    }));
+    void get()
+      .saveSettings()
+      .catch((err) => {
+        console.error("[globalStore] Failed to save recent project name:", err);
       });
   },
 

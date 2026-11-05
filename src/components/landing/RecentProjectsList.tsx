@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { Alert, Button, Group, Loader, Table, Text } from "@mantine/core";
-import { IconFolder, IconTrash } from "@tabler/icons-react";
+import { Button, Group, Loader, Text } from "@mantine/core";
+import { IconCheck, IconFolder, IconFolderOpen, IconTrash, IconX } from "@tabler/icons-react";
 import { exists } from "@tauri-apps/plugin-fs";
 
 import { useGlobalStore } from "../../stores/globalStore";
@@ -9,6 +9,7 @@ import { logAction } from "../../lib/debug";
 interface RecentEntry {
   path: string;
   projectId?: string;
+  name?: string;
   stale: boolean;
 }
 
@@ -89,7 +90,7 @@ export default function RecentProjectsList({
     }
 
     const shouldRemove = window.confirm(
-      `Project ${getProjectLabel(entry.path)} was moved or deleted. Remove from recent projects?`,
+      `Project ${entry.name ?? getProjectLabel(entry.path)} was moved or deleted. Remove from recent projects?`,
     );
 
     if (shouldRemove) {
@@ -99,73 +100,115 @@ export default function RecentProjectsList({
   }
 
   return (
-    <Table striped highlightOnHover data-testid={dataTestId || "recent-projects-table"}>
-      <Table.Thead data-testid="recent-projects-thead">
-        <Table.Tr data-testid="recent-projects-header-row">
-          <Table.Th data-testid="recent-projects-th-project">Project</Table.Th>
-          <Table.Th data-testid="recent-projects-th-status">Status</Table.Th>
-          <Table.Th data-testid="recent-projects-th-actions">Actions</Table.Th>
-        </Table.Tr>
-      </Table.Thead>
-      <Table.Tbody data-testid="recent-projects-tbody">
-        {entries.map((entry) => {
-          const rowId = entry.path.replace(/[^a-z0-9]/gi, "-");
-          return (
-            <Table.Tr key={entry.path} data-testid={`recent-project-row-${rowId}`}>
-              <Table.Td data-testid={`recent-project-name-cell-${rowId}`}>
-                <Group gap="xs" data-testid={`recent-project-name-group-${rowId}`}>
-                  <IconFolder size={16} data-testid={`recent-project-folder-icon-${rowId}`} />
-                  <Text data-testid={`recent-project-name-text-${rowId}`}>
-                    {getProjectLabel(entry.path)}
-                  </Text>
-                </Group>
-              </Table.Td>
-              <Table.Td data-testid={`recent-project-status-cell-${rowId}`}>
-                {entry.stale ? (
-                  <Alert
-                    color="red"
-                    variant="light"
-                    title="Moved or deleted"
-                    data-testid={`recent-project-alert-stale-${rowId}`}
-                  >
-                    This project file is no longer available.
-                  </Alert>
-                ) : (
-                  <Text c="green" data-testid={`recent-project-status-available-${rowId}`}>
-                    Available
-                  </Text>
-                )}
-              </Table.Td>
-              <Table.Td data-testid={`recent-project-actions-cell-${rowId}`}>
-                <Group gap="xs" data-testid={`recent-project-actions-group-${rowId}`}>
-                  <Button
-                    size="xs"
-                    variant="light"
-                    disabled={disabled}
-                    onClick={() => handleOpen(entry)}
-                    data-testid={`recent-open-btn-${rowId}`}
-                  >
-                    Open
-                  </Button>
-                  <Button
-                    size="xs"
-                    variant="subtle"
-                    color="red"
-                    leftSection={<IconTrash size={14} />}
-                    onClick={() => {
-                      logAction("recent_remove", { path: entry.path });
-                      removeRecentProject(entry.path);
-                    }}
-                    data-testid={`recent-remove-btn-${rowId}`}
-                  >
-                    Remove
-                  </Button>
-                </Group>
-              </Table.Td>
-            </Table.Tr>
-          );
-        })}
-      </Table.Tbody>
-    </Table>
+    <div role="list" data-testid={dataTestId || "recent-projects-list"}>
+      {entries.map((entry) => {
+        const rowId = entry.path.replace(/[^a-z0-9]/gi, "-");
+        const label = entry.name ?? getProjectLabel(entry.path);
+        const StatusIcon = entry.stale ? IconX : IconCheck;
+        return (
+          <div
+            role="listitem"
+            className="recent-project-row"
+            key={entry.path}
+            data-testid={`recent-project-row-${rowId}`}
+          >
+            <div className="recent-project-details" data-testid={`recent-project-details-${rowId}`}>
+              <IconFolder
+                size={21}
+                aria-hidden="true"
+                data-testid={`recent-project-folder-icon-${rowId}`}
+              />
+              <span className="recent-project-info" data-testid={`recent-project-info-${rowId}`}>
+                <Text
+                  component="span"
+                  fw={600}
+                  size="sm"
+                  data-testid={`recent-project-name-text-${rowId}`}
+                >
+                  {label}
+                </Text>
+                <Text
+                  component="span"
+                  className="recent-project-path"
+                  id={`recent-project-path-${rowId}`}
+                  data-testid={`recent-project-path-${rowId}`}
+                >
+                  {entry.path}
+                </Text>
+                <Text
+                  component="span"
+                  size="xs"
+                  c={entry.stale ? "red" : undefined}
+                  className="recent-project-status"
+                  id={`recent-project-status-${rowId}`}
+                  data-testid={`recent-project-status-${entry.stale ? "stale" : "available"}-${rowId}`}
+                >
+                  <StatusIcon
+                    size={14}
+                    aria-hidden="true"
+                    color={
+                      entry.stale
+                        ? "light-dark(var(--mantine-color-red-8), var(--mantine-color-red-4))"
+                        : "light-dark(var(--mantine-color-green-8), var(--mantine-color-green-4))"
+                    }
+                    style={{ flexShrink: 0 }}
+                    data-testid={`recent-project-status-icon-${rowId}`}
+                  />
+                  {entry.stale ? "Moved or deleted" : "Available"}
+                </Text>
+              </span>
+            </div>
+            <Group
+              gap="xs"
+              className="recent-project-actions"
+              data-testid={`recent-project-actions-${rowId}`}
+            >
+              <Button
+                size="xs"
+                h={44}
+                variant="filled"
+                color="blue.8"
+                leftSection={
+                  <IconFolderOpen
+                    size={16}
+                    aria-hidden="true"
+                    data-testid={`recent-open-icon-${rowId}`}
+                  />
+                }
+                disabled={disabled}
+                aria-label={`Open ${label}`}
+                aria-describedby={`recent-project-path-${rowId} recent-project-status-${rowId}`}
+                onClick={() => handleOpen(entry)}
+                data-testid={`recent-open-btn-${rowId}`}
+              >
+                Open
+              </Button>
+              <Button
+                size="xs"
+                h={44}
+                variant="filled"
+                color="red.8"
+                leftSection={
+                  <IconTrash
+                    size={16}
+                    aria-hidden="true"
+                    data-testid={`recent-remove-icon-${rowId}`}
+                  />
+                }
+                aria-label={`Remove ${label} from recent projects`}
+                title="Remove from this list only. Project files stay unchanged."
+                onClick={() => {
+                  logAction("recent_remove", { path: entry.path });
+                  removeRecentProject(entry.path);
+                }}
+                data-testid={`recent-remove-btn-${rowId}`}
+              >
+                Remove from list
+              </Button>
+            </Group>
+          </div>
+        );
+      })}
+    </div>
   );
 }
