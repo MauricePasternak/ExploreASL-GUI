@@ -37,7 +37,7 @@ const nodeTests = [
   "src/components/import/metadata{FieldHints,FormUtils}.test.ts",
   "src/components/processing/{ExecutionDashboard,SubjectSelection,subjectStatusIndex}.test.ts",
   "scripts/check-e2e-bundle.test.ts",
-  "src-tauri/{dev-mode,capabilities/default}.test.ts",
+  "src-tauri/capabilities/default.test.ts",
   "src/test/nodeEnvironment.test.ts",
 ];
 const testExclude = ["**/node_modules/**", "**/.worktrees/**", "e2e-tests/**", "tools/**"];

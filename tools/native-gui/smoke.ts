@@ -83,15 +83,49 @@ try {
   console.log("4K screenshot:", JSON.stringify(largeMetadata));
   await call("resize", { width: 800, height: 1200 });
   await call("wait", { selector: '[data-testid="welcome-card"]' });
-  await call("click", { selector: '[data-testid="layout-open-settings-btn"]' });
+  const opened = JSON.parse(
+    resultText(await call("click", { selector: '[data-testid="layout-open-settings-btn"]' })),
+  );
+  assert.equal(typeof opened.observed.route, "string");
   await call("wait", { selector: '[data-testid="settings-modal"]' });
-  await call("fill", { selector: '[data-testid="settings-add-delimiter-input"]', value: ";" });
+  const filled = JSON.parse(
+    resultText(
+      await call("fill", { selector: '[data-testid="settings-add-delimiter-input"]', value: ";" }),
+    ),
+  );
+  assert.equal(filled.observed.value, ";");
+  assert.equal(filled.observed.focus, '[data-testid="settings-add-delimiter-input"]');
+  const compact = JSON.parse(
+    resultText(await call("inspect", { selector: '[data-testid="settings-modal"]' })),
+  );
+  assert.ok(compact.elements.length > 0);
+  assert.ok(
+    compact.elements.every(
+      (element: { bounds?: unknown; center_hit?: unknown }) =>
+        !element.bounds && !element.center_hit,
+    ),
+  );
+  console.log(
+    "Compact vs geometry inspection bytes:",
+    resultText(await call("inspect", {})).length,
+    resultText(await call("inspect", { geometry: true })).length,
+  );
+  const ambiguous = (await client.callTool({
+    name: "click",
+    arguments: { selector: "button" },
+    _meta: { "ai.opencode/sessionID": "ses_native_gui_smoke_a" },
+  })) as CallToolResult;
+  assert.equal(ambiguous.isError, true);
+  const ambiguity = JSON.parse(resultText(ambiguous));
+  assert.match(ambiguity.error, /Selector is ambiguous: matched \d+ elements.*First matches: \S/);
+  assert.equal(ambiguity.input, "not_sent");
   const inspected = JSON.parse(
     resultText(
       await call("inspect", {
         selector: '[data-testid="settings-modal"]',
         styles: ["display", "color"],
         include_hidden: true,
+        geometry: true,
       }),
     ),
   );
@@ -112,6 +146,8 @@ try {
   assert.match(failure.error, /Timed out waiting.*element does not exist/);
   assert.equal(failure.evidence.errors.length, 0);
   assert.equal(failure.evidence.artifacts.length, 3);
+  assert.equal(failure.evidence.target.selector, '[data-testid="missing-smoke-element"]');
+  assert.match(failure.evidence.target.unavailable, /Target absent:/);
   for (const artifact of failure.evidence.artifacts) {
     assert.ok(artifact.startsWith(`${launched.workspace}/failures/`));
     assert.ok((await stat(artifact)).size > 0);

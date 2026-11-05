@@ -72,7 +72,7 @@ Neither mode changes desktop access permissions or disables X authentication.
 ## Agent workflow
 
 1. `launch`: starts a private virtual display/window; returns isolated workspace and application path.
-2. `inspect`: visible text, labels, values, disabled/checked state, CSS selectors.
+2. `inspect`: compact selectors, labels, short text/values and true state flags; `geometry: true` for layout.
 3. `click`, `fill`, `select`, `keys`, `hover`, `scroll`, `drag`, `wait`: real WebDriver input and bounded waits.
 4. `screenshot`: PNG image plus saved artifact path.
 5. `close`: normal project shutdown, then window/driver disposal.
@@ -89,6 +89,7 @@ await tools.native_gui.inspect({
   selector: '[data-testid="settings-modal"]',
   styles: ["display", "overflow", "color"],
   include_hidden: true,
+  geometry: true,
   limit: 100,
 });
 await tools.native_gui.diagnostics();
@@ -105,21 +106,45 @@ Launch/resize return observed native window rect, CSS viewport/screen, device pi
 ratio and visual-viewport scale, plus requested size and virtual capacity. WebDriver
 window units are reported separately from image pixels; do not infer screenshot size
 from the request. OS constraints, scaling and docked devtools affect the result.
-The current debug build opens devtools automatically: tested 800×1200 native window
-produced 800×900 CSS viewport; 3840×2160 produced 3840×1860, DPR 1. App bootstrap is
-unchanged. `screenshot` text is JSON containing `path`, actual PNG `image` dimensions
+Debug builds leave devtools closed on startup. On Linux, press `Ctrl+Shift+I` or
+right-click and choose **Inspect Element** to open them manually. Older binaries may
+still open devtools automatically; rebuild and close/relaunch to pick up this change.
+`screenshot` text is JSON containing `path`, actual PNG `image` dimensions
 (image pixels), and best-effort live `metrics`; image content remains PNG.
 
-Inspection adds CSS-pixel bounds, focus, per-element/document scroll offsets,
-`visible`, `inViewport` and `center_hit`. Hidden, offscreen and covered are distinct;
-center-point sampling **does not guarantee clickability** or detect every overlap.
-Default inspection excludes hidden elements but includes offscreen ones; `include_hidden`
-includes hidden controls without exposing arbitrary HTML. `styles` accepts at most 12
-CSS property names, each value capped at 500 characters. Existing 500-element/8000-text
-limits remain; control values cap at 2000 characters, labels/text at 200. Password
-values remain redacted. Numeric DOM values (such as list-item ordinals) remain numeric.
-Inspection validates a unique root and never scrolls/focuses.
+Inspection is compact by default. Each element reports its unique `selector`, `tag`,
+and, only when present, `role`, `label`, `text`, `value`, and true state flags:
+`disabled`, `checked` (boolean, or the `aria-checked` string), `focused`, `hidden`,
+`offscreen`. Controls and leaf elements keep up to 200 characters of text. Container
+text is cut to 80 characters and omitted when it repeats its nearest listed ancestor;
+the root's text appears once at top level (8000 characters), so read it for prose.
+Compact values cap at 200 characters.
+
+`geometry: true` adds CSS-pixel `bounds`, per-element scroll offsets, explicit
+`visible`/`inViewport` booleans and `center_hit`, and raises the value cap to 2000.
+Hidden, offscreen and covered are distinct; center-point sampling **does not guarantee
+clickability** or detect every overlap. Default inspection excludes hidden elements
+but includes offscreen ones; `include_hidden` includes hidden controls without exposing
+arbitrary HTML. `styles` accepts at most 12 CSS property names, each value capped at
+500 characters, in either mode. The 500-element limit and label cap of 200 remain.
+Password values remain redacted. Numeric DOM values (such as list-item ordinals) remain
+numeric. Inspection validates a unique root and never scrolls/focuses.
 Selectors cap at 4096 characters (`null` if structural fallback exceeds that bound).
+An ambiguous selector, in `inspect`, actions or `wait`, fails with its match count and
+up to five matches: unique selector, first 60 characters of text, and `[hidden]` when
+not rendered.
+
+`click` and `keys` return `observed: { route, focus }`; `fill` and `select` also return
+the target's `value` (passwords redacted, 200 characters, `null` if the target is gone
+or no longer unique). Observations are read immediately after input; later validation,
+formatting or async work can still change them, so they are not proof of completion.
+If observation fails, `observed.unavailable` explains why; the input still succeeded.
+
+Failed input tools (`click`, `hover`, `scroll`, `drag`, `fill`, `select`, `keys`) add
+`input`. `not_sent` means the failure happened before any input was delivered (target
+missing, ambiguous, covered, invalid point). `possibly_sent` means the native input
+command itself failed, so some input may have landed: inspect before repeating, and
+never blindly retry a destructive action.
 
 Diagnostics report workspace, observed driver process status, and live route/metrics
 only when short read-only protocol probes succeed (1.5 s per probe). A cached connection
@@ -132,6 +157,9 @@ close/crash/failed launch, existing workspace logs remain readable. Fixed allowl
 
 Each tail reads at most 16 KiB from source and returns at most 100 lines. Byte-capped
 tails retain partial-record suffixes, skipping any initial split UTF-8 codepoint.
+Agent-facing `driver.log` tails collapse complete, recognized nonfatal XKB keysym
+warning blocks to one summary line. Unknown warnings, errors and incomplete blocks
+remain visible; original log files and application-log tails are unchanged.
 No arbitrary file input, archive/host-log traversal, environment or Xauthority inspection. Missing,
 non-regular or symlink-escaping files report unavailable independently. Logging paths
 follow `src-tauri/src/app/logging.rs`; older binaries may lack one or both native logs.
@@ -141,6 +169,10 @@ Failed tool execution preserves its original error and `isError=true`, returning
 PNG, 40-element password-redacted DOM, and diagnostics JSON save under owned workspace
 `failures/`; no successful-action tracing. Startup errors capture evidence before driver
 cleanup; tool dispatch reuses that evidence rather than recapturing a closed window.
+Selector-based failures also return `evidence.target`: a one-element inspection including
+hidden state, bounds, disabled state, center hit and computed interaction styles, or an
+unavailability reason if the target cannot be inspected. This is independent of the
+40-element body snapshot and never replaces the original action error.
 Capture never scrolls, navigates, closes,
 or mutates app/project state. Unreachable browser probes time out; capture/write failure
 cannot replace the action error. MCP schema-validation errors occur before tool execution
@@ -156,6 +188,11 @@ comboboxes require clicking trigger, inspecting options, then clicking desired o
 Actions wait up to 15 seconds for an absent target to appear, then wait for it to be
 displayed. Ambiguous selectors still fail; input actions are never replayed by the
 controller. Use `wait` for application-specific completion after input.
+`inspect` is immediate: after a route or step change, wait for a destination element
+before inspecting it. Use selectors returned by current inspection, not guessed
+path-dependent test IDs. Visible/enabled state is not proof of clickability. On
+interaction failure, inspect the exact target with `include_hidden: true` and take a
+screenshot instead of blindly repeating clicks or adding arbitrary sleeps.
 `wait` text uses DOM `textContent`, matching native E2E tests; WebKit can return empty
 `getText()` for rendered buttons. `navigate` accepts logical routes such as `/overview`,
 not full URLs or hash-prefixed paths, and does not bypass project-access checks.

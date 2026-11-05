@@ -9,7 +9,14 @@ import type { RequestHandlerExtra } from "@modelcontextprotocol/sdk/shared/proto
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
-import { copyProject, inspectDom, NativeGuiSession, PointSchema, SizeSchema } from "./session";
+import {
+  copyProject,
+  inspectDom,
+  NativeGuiSession,
+  pageScript,
+  PointSchema,
+  SizeSchema,
+} from "./session";
 import { errorText, pngDimensions, saveArtifact } from "./diagnostics";
 
 type Extra = RequestHandlerExtra<ServerRequest, ServerNotification>;
@@ -30,10 +37,11 @@ export function createServer() {
     { name: "exploreasl-native-gui", version: "0.1.0" },
     {
       instructions:
-        "Controls disposable native Linux Tauri windows, not Chromium. Launch first, inspect for CSS selectors, then act. Windows use private virtual displays by default; display: desktop explicitly uses the inherited graphical session. Launch defaults to vanilla settings for new sessions; profile_template seeds only execution profiles into a fresh workspace, and fresh starts an empty workspace. Each OpenCode session owns a separate window. Real filesystem is read-only; writable paths are returned by launch. Native dialogs are not automated; use the app's Enter path alternatives. Pointer offsets use CSS pixels, not screenshot pixels. Close when finished.",
+        "Controls disposable native Linux Tauri windows, not Chromium. Launch first, inspect, then reuse returned unique CSS selectors; do not guess path-dependent test IDs. After actions that change routes or steps, wait for a destination element before inspecting it. inspect never waits; wait visible/enabled does not guarantee clickability. On interaction failure, inspect the exact target with include_hidden and take a screenshot; do not blindly repeat clicks or add arbitrary sleeps. Failed input tools report input: not_sent (nothing was delivered) or possibly_sent (inspect before repeating; never retry blindly). Successful input returns observed route/focus/value, which later validation or formatting can still change. Launch uses an existing app build: after app edits, rebuild and close/relaunch; selector failures alone do not imply a stale build. Windows use private virtual displays by default; display: desktop explicitly uses the inherited graphical session. Launch defaults to vanilla settings for new sessions; profile_template seeds only execution profiles into a fresh workspace, and fresh starts an empty workspace. Each OpenCode session owns a separate window. Real filesystem is read-only; writable paths are returned by launch. Native dialogs are not automated; use the app's Enter path alternatives. Pointer offsets use CSS pixels, not screenshot pixels. Close when finished.",
     },
   );
   const sessions = new Map<string, { gui: NativeGuiSession; pending: Promise<unknown> }>();
+  const inputTools = new Set(["click", "hover", "scroll", "drag", "fill", "select", "keys"]);
 
   function state(extra: Extra) {
     const id = extra._meta?.["ai.opencode/sessionID"];
@@ -67,12 +75,26 @@ export function createServer() {
               const evidence =
                 error instanceof Error && "evidence" in error
                   ? error.evidence
-                  : await session.gui.failureEvidence().catch((captureError: unknown) => ({
-                      unavailable: errorText(captureError),
-                    }));
+                  : await session.gui
+                      .failureEvidence(
+                        "selector" in args && typeof args.selector === "string"
+                          ? args.selector
+                          : undefined,
+                      )
+                      .catch((captureError: unknown) => ({
+                        unavailable: errorText(captureError),
+                      }));
               return {
                 ...text({
                   error: String(error instanceof Error ? error.message : error),
+                  ...(inputTools.has(name)
+                    ? {
+                        input:
+                          error instanceof Error && "inputSent" in error
+                            ? "possibly_sent"
+                            : "not_sent",
+                      }
+                    : {}),
                   evidence,
                 }),
                 isError: true,
@@ -146,9 +168,13 @@ export function createServer() {
 
   register(
     "inspect",
-    "Read-only DOM inspection: text/labels/values (passwords redacted), unique selectors, CSS bounds, focus/scroll and visibility/center hit-test overlap. Offscreen differs from hidden/covered; sampled hit testing does not guarantee clickability. Optional bounded computed styles/hidden elements. Never scrolls or focuses.",
+    "Immediate read-only DOM inspection; never waits, scrolls or focuses. After navigation, wait for the destination element first. Compact by default: unique selectors, tag/role/label, short text and values (passwords redacted), and only true state flags (disabled, checked, focused, hidden, offscreen). Container text is omitted when it repeats its nearest listed ancestor; read root text for prose. geometry adds CSS bounds, scroll offsets and a center hit test; sampled hit testing does not guarantee clickability. Optional bounded computed styles/hidden elements.",
     {
       selector: z.string().min(1).max(4096).default("body"),
+      geometry: z
+        .boolean()
+        .default(false)
+        .describe("Add bounds, scroll offsets, visible/inViewport booleans and center hit test."),
       limit: z.number().int().min(1).max(500).default(150),
       styles: z
         .array(
@@ -167,13 +193,12 @@ export function createServer() {
     },
     async (args, gui) =>
       text(
-        await gui.browser.execute(
-          inspectDom,
-          args.selector,
-          args.limit,
-          args.styles,
-          args.include_hidden,
-        ),
+        (await gui.browser.execute(pageScript(inspectDom), args.selector, {
+          limit: args.limit,
+          styles: args.styles,
+          includeHidden: args.include_hidden,
+          geometry: args.geometry,
+        })) as ReturnType<typeof inspectDom>,
       ),
   );
 
@@ -205,11 +230,11 @@ export function createServer() {
 
   register(
     "click",
-    "Click unique visible element, waiting for async appearance. Optional point targets a CSS-pixel offset from its top-left. Scrolls into view; real WebDriver input, no action retries.",
+    "Click unique visible element, waiting for async appearance. Success confirms input, not navigation or async completion: wait for a destination element afterward. Returns route and focus observed immediately after input. Optional point targets a CSS-pixel offset from its top-left. Scrolls into view; real WebDriver input, no action retries.",
     { selector, point: point.optional() },
     async (args, gui) => {
       await gui.click(args.selector, args.point);
-      return text({ clicked: args.selector });
+      return text({ clicked: args.selector, observed: await gui.observe() });
     },
   );
 
@@ -255,39 +280,49 @@ export function createServer() {
 
   register(
     "fill",
-    "Replace text in unique visible input or textarea using WebDriver input events.",
+    "Replace text in unique visible input or textarea using WebDriver input events. Returns the value observed immediately afterward (passwords redacted, 200 characters); later validation or formatting can still change it.",
     { selector, value: z.string().max(100_000) },
     async (args, gui) => {
-      await (await gui.element(args.selector)).setValue(args.value);
-      return text({ filled: args.selector });
+      const element = await gui.element(args.selector);
+      const browser = gui.browser;
+      await gui.dispatch(async () => {
+        if (args.value === "") {
+          await element.click();
+          await browser.keys(["Control", "a"]);
+          await browser.keys("Backspace");
+        } else await element.setValue(args.value);
+      });
+      return text({ filled: args.selector, observed: await gui.observe(args.selector) });
     },
   );
 
   register(
     "select",
-    "Select option by value in native HTML select. For Mantine/custom dropdowns use click on trigger, inspect, then click option.",
+    "Select option by value in native HTML select; returns the value observed immediately afterward. For Mantine/custom dropdowns use click on trigger, inspect, then click option.",
     { selector, value: z.string().max(4096) },
     async (args, gui) => {
-      await (await gui.element(args.selector)).selectByAttribute("value", args.value);
-      return text({ selected: args.selector });
+      const element = await gui.element(args.selector);
+      await gui.dispatch(() => element.selectByAttribute("value", args.value));
+      return text({ selected: args.selector, observed: await gui.observe(args.selector) });
     },
   );
 
   register(
     "keys",
-    'Send WebDriver keys to focused element. Examples: ["Tab"], ["Escape"], ["Control","s"]. Modifiers released after command.',
+    'Send WebDriver keys to focused element; returns route and focus observed afterward. Examples: ["Tab"], ["Escape"], ["Control","s"]. Modifiers released after command.',
     {
       keys: z.array(z.string().min(1).max(100)).min(1).max(16),
     },
     async (args, gui) => {
-      await gui.browser.keys(args.keys);
-      return text({ sent: args.keys });
+      const browser = gui.browser;
+      await gui.dispatch(() => browser.keys(args.keys));
+      return text({ sent: args.keys, observed: await gui.observe() });
     },
   );
 
   register(
     "wait",
-    "Wait for CSS selector state; text condition means text contains supplied string. Hidden succeeds when no matching displayed element remains.",
+    "Wait for CSS selector state; use a destination element after navigation or step changes. Visible/enabled does not guarantee clickability or that another control is ready. Text condition means text contains supplied string. Hidden succeeds when no matching displayed element remains.",
     {
       selector,
       state: z.enum(["visible", "hidden", "enabled", "text"]).default("visible"),
@@ -300,7 +335,7 @@ export function createServer() {
       await gui.browser.execute((css) => {
         document.querySelectorAll(css);
       }, args.selector);
-      await gui.browser.waitUntil(
+      const waiting = gui.browser.waitUntil(
         async () => {
           const elements = await gui.browser.$$(args.selector).getElements();
           if (args.state === "hidden")
@@ -326,6 +361,15 @@ export function createServer() {
           timeoutMsg: `Timed out waiting for ${args.selector}: ${args.state}`,
         },
       );
+      try {
+        await waiting;
+      } catch (error) {
+        if (args.state === "hidden") throw error;
+        const count = await gui.browser
+          .execute((css) => document.querySelectorAll(css).length, args.selector)
+          .catch(() => 0);
+        throw count > 1 ? await gui.ambiguityError(args.selector).catch(() => error) : error;
+      }
       return text({ matched: args.selector, state: args.state });
     },
   );

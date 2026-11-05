@@ -434,10 +434,13 @@ export class NativeGuiSession {
     return { ...status, live, logs };
   }
 
-  async failureEvidence() {
+  async failureEvidence(selector?: string) {
     const diagnostics = await this.diagnostics();
     const artifacts: string[] = [];
     const errors: string[] = [];
+    let target:
+      | { selector: string; inspection?: ReturnType<typeof inspectDom>; unavailable?: string }
+      | undefined;
     if (!this.workspace) return { diagnostics, artifacts, errors };
     const prefix = `failures/${Date.now()}-${randomUUID()}`;
     if (this.connection) {
@@ -456,14 +459,42 @@ export class NativeGuiSession {
         (async () => {
           try {
             const dom = await this.probe<ReturnType<typeof inspectDom>>("execute/sync", {
-              script: `return (${inspectDom.toString()})("body", 40, [], false);`,
-              args: [],
+              script: pageScript(inspectDom),
+              args: ["body", { limit: 40 }],
             });
             artifacts.push(
               await saveArtifact(this.workspace!, `${prefix}.dom.json`, JSON.stringify(dom)),
             );
           } catch (error) {
             errors.push(`DOM: ${errorText(error)}`);
+          }
+        })(),
+        (async () => {
+          if (!selector) return;
+          try {
+            const inspection = await this.probe<ReturnType<typeof inspectDom>>("execute/sync", {
+              script: pageScript(inspectDom),
+              args: [
+                selector,
+                {
+                  limit: 1,
+                  styles: [
+                    "display",
+                    "visibility",
+                    "opacity",
+                    "pointer-events",
+                    "position",
+                    "z-index",
+                    "overflow",
+                  ],
+                  includeHidden: true,
+                  geometry: true,
+                },
+              ],
+            });
+            target = { selector, inspection };
+          } catch (error) {
+            target = { selector, unavailable: errorText(error) };
           }
         })(),
       ]);
@@ -479,7 +510,7 @@ export class NativeGuiSession {
     } catch (error) {
       errors.push(`diagnostics file: ${errorText(error)}`);
     }
-    return { diagnostics, artifacts, errors };
+    return { diagnostics, target, artifacts, errors };
   }
 
   async close(): Promise<void> {
@@ -540,12 +571,11 @@ export class NativeGuiSession {
         },
         {
           timeout: 15_000,
-          timeoutMsg: `Timed out waiting for ${selector}: element does not exist`,
+          timeoutMsg: `Timed out waiting for ${selector}: element does not exist. Confirm navigation completed or inspect body for current selectors.`,
         },
       );
     }
-    if (count !== 1)
-      throw new Error(`Selector matched ${count} elements; use a unique CSS selector.`);
+    if (count !== 1) throw await this.ambiguityError(selector);
     const element = this.browser.$(selector);
     await element.waitForDisplayed({ timeout: 15_000 });
     if (scroll) await element.scrollIntoView({ block: "center", inline: "center" });
@@ -589,19 +619,51 @@ export class NativeGuiSession {
     );
   }
 
-  async performInput(action: { perform(): Promise<void> }) {
+  async ambiguityError(selector: string): Promise<Error> {
+    const message = (await this.browser.execute(
+      pageScript((page, css: string) => page.ambiguous(css)),
+      selector,
+    )) as string;
+    return new Error(message);
+  }
+
+  // Failures inside send() may follow partially delivered input; callers must not blindly retry.
+  async dispatch<T>(send: () => Promise<T>): Promise<T> {
     try {
-      await action.perform();
+      return await send();
     } catch (error) {
-      // A partially accepted drag must not leave a mouse button held down.
-      await this.browser.releaseActions().catch(() => {});
-      throw error;
+      throw Object.assign(error instanceof Error ? error : new Error(String(error)), {
+        inputSent: "possibly",
+      });
     }
+  }
+
+  async observe(selector?: string) {
+    try {
+      return (await this.browser.execute(pageScript(observeState), selector ?? null)) as ReturnType<
+        typeof observeState
+      >;
+    } catch (error) {
+      return { unavailable: errorText(error) };
+    }
+  }
+
+  async performInput(action: { perform(): Promise<void> }) {
+    await this.dispatch(async () => {
+      try {
+        await action.perform();
+      } catch (error) {
+        // A partially accepted drag must not leave a mouse button held down.
+        await this.browser.releaseActions().catch(() => {});
+        throw error;
+      }
+    });
   }
 
   async click(selector: string, point?: Point) {
     if (!point) {
-      await (await this.element(selector)).click();
+      const element = await this.element(selector);
+      await this.dispatch(() => element.click());
       return;
     }
     const [target] = await this.pointerPoints(selector, [point]);
@@ -661,18 +723,10 @@ export class NativeGuiSession {
   }
 }
 
-// Passed directly to WebDriver; keep browser-side logic self-contained.
-export function inspectDom(
-  selector: string,
-  limit: number,
-  styles: string[] = [],
-  includeHidden = false,
-) {
-  const roots = document.querySelectorAll(selector);
-  if (roots.length !== 1)
-    throw new Error(`Selector matched ${roots.length} elements; use a unique CSS selector.`);
-  const root = roots[0];
-  const helpers = {
+// Injected into page scripts by source (see pageScript); keep it self-contained.
+// Object methods, not named arrow consts: tsx wraps those in a __name helper absent in the page.
+export function pageHelpers() {
+  const page = {
     locator(element: Element): string | null {
       const testId = element.getAttribute("data-testid");
       if (testId) {
@@ -705,99 +759,206 @@ export function inspectDom(
       }
       return true;
     },
+    value(node: Element, limit: number): unknown {
+      const control = node as HTMLInputElement;
+      if (control.type === "password") return "[redacted]";
+      return typeof control.value === "string" ? control.value.slice(0, limit) : control.value;
+    },
+    ambiguous(selector: string): string {
+      const matches = Array.from(document.querySelectorAll(selector));
+      const first = matches.slice(0, 5).map((node) => {
+        const text = (node as HTMLElement).innerText?.trim().replace(/\s+/g, " ").slice(0, 60);
+        const hidden = node instanceof HTMLElement && !page.visible(node) ? " [hidden]" : "";
+        return `${page.locator(node) ?? node.tagName.toLowerCase()}${text ? ` "${text}"` : ""}${hidden}`;
+      });
+      return `Selector is ambiguous: matched ${matches.length} elements; narrow the CSS selector. First matches: ${first.join("; ")}`;
+    },
   };
-  const candidates = [
-    root,
-    ...root.querySelectorAll(
-      "button, input, textarea, select, a, [role], [tabindex], [data-testid]",
-    ),
-  ].filter((node) => node instanceof HTMLElement && (includeHidden || helpers.visible(node)));
+  return page;
+}
+export type PageHelpers = ReturnType<typeof pageHelpers>;
+
+// WebDriver serializes functions without their closures, so helpers travel as source.
+export function pageScript(fn: (page: PageHelpers, ...args: never[]) => unknown): string {
+  return `return (${fn.toString()})((${pageHelpers.toString()})(), ...arguments);`;
+}
+
+export type InspectOptions = {
+  limit?: number;
+  styles?: string[];
+  includeHidden?: boolean;
+  geometry?: boolean;
+};
+
+export type InspectedElement = {
+  selector: string | null;
+  tag: string;
+  role?: string;
+  label?: string;
+  text?: string;
+  value?: unknown;
+  disabled?: true;
+  checked?: boolean | string;
+  focused?: true;
+  hidden?: true;
+  offscreen?: true;
+  styles?: Record<string, string>;
+  visible?: boolean;
+  inViewport?: boolean;
+  bounds?: Record<string, number | string>;
+  scroll?: Record<string, number>;
+  center_hit?: { status: string; target: string | null };
+};
+
+// Passed to WebDriver through pageScript; keep browser-side logic self-contained.
+export function inspectDom(
+  page: PageHelpers,
+  selector: string,
+  { limit = 150, styles = [], includeHidden = false, geometry = false }: InspectOptions = {},
+) {
+  const roots = document.querySelectorAll(selector);
+  if (roots.length === 0)
+    throw new Error(
+      `Target absent: ${selector}. Current URL: ${window.location.href.slice(0, 4096)}. inspect does not wait; wait for the destination element after navigation, or inspect body for current selectors.`,
+    );
+  if (roots.length > 1) throw new Error(page.ambiguous(selector));
+  const root = roots[0];
+  const query = "button, input, textarea, select, a, [role], [tabindex], [data-testid]";
+  const controlRoles =
+    /^(button|link|tab|option|menuitem|menuitemcheckbox|menuitemradio|checkbox|radio|switch|treeitem)$/;
+  const candidates = [root, ...root.querySelectorAll(query)].filter(
+    (node) => node instanceof HTMLElement && (includeHidden || page.visible(node)),
+  );
+  // Containers repeat descendant text; keep it only when it differs from the nearest listed ancestor.
+  const shownText = new Map<Element, string>();
+  const elements = candidates.slice(0, limit).map((node): InspectedElement => {
+    const control = node as HTMLInputElement;
+    const tag = node.tagName.toLowerCase();
+    const role = node.getAttribute("role")?.slice(0, 200) ?? "";
+    const label = (
+      node.getAttribute("aria-label") ??
+      control.labels?.[0]?.textContent?.trim() ??
+      ""
+    ).slice(0, 200);
+    const text = (node as HTMLElement).innerText?.trim().slice(0, 200) ?? "";
+    const isControl =
+      /^(button|a|option|summary|label)$/.test(tag) ||
+      controlRoles.test(role) ||
+      !node.querySelector(query);
+    let ancestor = node.parentElement;
+    while (ancestor && !shownText.has(ancestor)) ancestor = ancestor.parentElement;
+    const containerText = text.slice(0, 80);
+    const showText =
+      node !== root &&
+      !!text &&
+      (isControl || !ancestor || shownText.get(ancestor) !== containerText);
+    shownText.set(node, containerText);
+    const value = page.value(node, geometry ? 2000 : 200);
+    const checked =
+      control.type === "checkbox" || control.type === "radio"
+        ? control.checked
+        : (node.getAttribute("aria-checked") ?? undefined);
+    const rendered = page.visible(node as HTMLElement);
+    const rect = node.getBoundingClientRect();
+    const inViewport =
+      rect.width > 0 &&
+      rect.height > 0 &&
+      rect.bottom > 0 &&
+      rect.top < innerHeight &&
+      rect.right > 0 &&
+      rect.left < innerWidth;
+    const entry: InspectedElement = {
+      selector: page.locator(node),
+      tag,
+      ...(role ? { role } : {}),
+      ...(label ? { label } : {}),
+      ...(showText ? { text: isControl ? text : containerText } : {}),
+      ...(value !== undefined && value !== "" ? { value } : {}),
+      ...(control.disabled || node.getAttribute("aria-disabled") === "true"
+        ? { disabled: true as const }
+        : {}),
+      ...(checked !== undefined ? { checked } : {}),
+      ...(document.activeElement === node ? { focused: true as const } : {}),
+      ...(rendered ? {} : { hidden: true as const }),
+      ...(rendered && !inViewport ? { offscreen: true as const } : {}),
+      ...(styles.length
+        ? {
+            styles: Object.fromEntries(
+              styles.map((property) => [
+                property,
+                getComputedStyle(node).getPropertyValue(property).slice(0, 500),
+              ]),
+            ),
+          }
+        : {}),
+    };
+    if (!geometry) return entry;
+    const x = rect.left + rect.width / 2;
+    const y = rect.top + rect.height / 2;
+    const centerInViewport = x >= 0 && x < innerWidth && y >= 0 && y < innerHeight;
+    const hit = rendered && centerInViewport ? document.elementFromPoint(x, y) : null;
+    return {
+      ...entry,
+      visible: rendered,
+      inViewport,
+      bounds: {
+        x: rect.x,
+        y: rect.y,
+        width: rect.width,
+        height: rect.height,
+        top: rect.top,
+        right: rect.right,
+        bottom: rect.bottom,
+        left: rect.left,
+        units: "CSS pixels",
+      },
+      scroll: {
+        left: node.scrollLeft,
+        top: node.scrollTop,
+        width: node.scrollWidth,
+        height: node.scrollHeight,
+        client_width: node.clientWidth,
+        client_height: node.clientHeight,
+      },
+      center_hit: {
+        status: !rendered
+          ? "hidden"
+          : !centerInViewport
+            ? "outside-viewport"
+            : !hit
+              ? "no-hit"
+              : node.contains(hit)
+                ? "uncovered"
+                : "covered",
+        target: hit ? page.locator(hit) : null,
+      },
+    };
+  });
   return {
     url: window.location.href.slice(0, 4096),
     text: (root as HTMLElement).innerText?.slice(0, 8000) ?? "",
-    focus: document.activeElement ? helpers.locator(document.activeElement) : null,
+    focus: document.activeElement ? page.locator(document.activeElement) : null,
     scroll: { x: scrollX, y: scrollY },
-    hit_test_note:
-      "Center-point sample only; not a guarantee of clickability. Hidden, offscreen and covered are distinct.",
+    ...(geometry
+      ? {
+          hit_test_note:
+            "Center-point sample only; not a guarantee of clickability. Hidden, offscreen and covered are distinct.",
+        }
+      : {}),
     total: candidates.length,
-    elements: candidates.slice(0, limit).map((node) => {
-      const control = node as HTMLInputElement;
-      const rect = node.getBoundingClientRect();
-      const rendered = helpers.visible(node as HTMLElement);
-      const inViewport =
-        rect.width > 0 &&
-        rect.height > 0 &&
-        rect.bottom > 0 &&
-        rect.top < innerHeight &&
-        rect.right > 0 &&
-        rect.left < innerWidth;
-      const x = rect.left + rect.width / 2;
-      const y = rect.top + rect.height / 2;
-      const centerInViewport = x >= 0 && x < innerWidth && y >= 0 && y < innerHeight;
-      const hit = rendered && centerInViewport ? document.elementFromPoint(x, y) : null;
-      return {
-        selector: helpers.locator(node),
-        tag: node.tagName.toLowerCase(),
-        role: node.getAttribute("role")?.slice(0, 200) ?? null,
-        label: (
-          node.getAttribute("aria-label") ??
-          control.labels?.[0]?.textContent?.trim() ??
-          ""
-        ).slice(0, 200),
-        text: (node as HTMLElement).innerText?.trim().slice(0, 200),
-        value:
-          control.type === "password"
-            ? "[redacted]"
-            : typeof control.value === "string"
-              ? control.value.slice(0, 2000)
-              : control.value,
-        disabled: control.disabled || node.getAttribute("aria-disabled") === "true",
-        checked: control.checked,
-        inViewport,
-        visible: rendered,
-        focused: document.activeElement === node,
-        bounds: {
-          x: rect.x,
-          y: rect.y,
-          width: rect.width,
-          height: rect.height,
-          top: rect.top,
-          right: rect.right,
-          bottom: rect.bottom,
-          left: rect.left,
-          units: "CSS pixels",
-        },
-        scroll: {
-          left: node.scrollLeft,
-          top: node.scrollTop,
-          width: node.scrollWidth,
-          height: node.scrollHeight,
-          client_width: node.clientWidth,
-          client_height: node.clientHeight,
-        },
-        center_hit: {
-          status: !rendered
-            ? "hidden"
-            : !centerInViewport
-              ? "outside-viewport"
-              : !hit
-                ? "no-hit"
-                : node.contains(hit)
-                  ? "uncovered"
-                  : "covered",
-          target: hit ? helpers.locator(hit) : null,
-        },
-        ...(styles.length
-          ? {
-              styles: Object.fromEntries(
-                styles.map((property) => [
-                  property,
-                  getComputedStyle(node).getPropertyValue(property).slice(0, 500),
-                ]),
-              ),
-            }
-          : {}),
-      };
-    }),
+    elements,
+  };
+}
+
+// Passed to WebDriver through pageScript. Values are observed immediately, not final.
+export function observeState(page: PageHelpers, selector: string | null) {
+  const focused = document.activeElement;
+  const targets = selector ? document.querySelectorAll(selector) : [];
+  return {
+    route: location.hash.slice(1, 4097),
+    focus: focused && focused !== document.body ? page.locator(focused) : null,
+    ...(selector
+      ? { value: targets.length === 1 ? (page.value(targets[0], 200) ?? null) : null }
+      : {}),
   };
 }

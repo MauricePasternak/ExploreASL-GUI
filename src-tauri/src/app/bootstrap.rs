@@ -53,7 +53,6 @@ pub fn run() {
                 #[cfg(debug_assertions)]
                 {
                     window.set_size(Size::Logical(LogicalSize::new(800.0, 900.0)))?;
-                    window.open_devtools();
                 }
             }
             Ok(())

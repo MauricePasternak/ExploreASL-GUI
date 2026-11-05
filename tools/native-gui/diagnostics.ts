@@ -7,6 +7,22 @@ export const LOG_LINES = 100;
 export const errorText = (error: unknown) =>
   String(error instanceof Error ? error.message : error).slice(0, 2000);
 
+// Collapse only complete, recognized nonfatal blocks; leave new warnings and errors visible.
+const XKB_NOISE = new RegExp(
+  "^The XKEYBOARD keymap compiler \\(xkbcomp\\) reports:\\n" +
+    "(?:> Warning: +Could not resolve keysym XF86(?:" +
+    "CameraAccess(?:Enable|Disable|Toggle)|NextElement|PreviousElement|AutopilotEngageToggle|" +
+    "MarkWaypoint|Sos|NavChart|FishingChart|SingleRangeRadar|DualRangeRadar|RadarOverlay|" +
+    "TraditionalSonar|ClearvuSonar|SidevuSonar|NavInfo)\\n)+" +
+    "Errors from xkbcomp are not fatal to the X server(?=\\n|$)",
+  "gm",
+);
+const IGNORED_DRIVER_LINES = new Set([
+  "_XSERVTransmkdir: ERROR: euid != 0,directory /tmp/.X11-unix will not be created.",
+  "libEGL warning: DRI3 error: Could not get DRI3 device",
+  "libEGL warning: Ensure your X server supports DRI3 to get accelerated rendering",
+]);
+
 // Linux-only controller: verify the opened descriptor, not just a pre-open path check.
 async function ownedFile(workspace: string, relative: string, flags: number) {
   if ((await realpath(workspace)) !== workspace)
@@ -43,8 +59,18 @@ export async function tailLog(workspace: string, relative: string) {
       if (size > LOG_BYTES) {
         while (start < bytesRead && (buffer[start] & 0xc0) === 0x80) start++;
       }
-      const text = buffer.subarray(start, bytesRead).toString("utf8");
-      const lines = text.replace(/\n$/, "").split("\n");
+      const raw = buffer.subarray(start, bytesRead).toString("utf8");
+      const text =
+        relative === "driver.log"
+          ? raw.replace(
+              XKB_NOISE,
+              "[Known nonfatal XKB keysym warnings omitted; original driver.log unchanged]",
+            )
+          : raw;
+      const lines = text
+        .replace(/\n$/, "")
+        .split("\n")
+        .filter((line) => relative !== "driver.log" || !IGNORED_DRIVER_LINES.has(line));
       return {
         path: filename,
         size_bytes: size,

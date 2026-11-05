@@ -13,6 +13,8 @@ import {
   copyProject,
   inspectDom,
   NativeGuiSession,
+  observeState,
+  pageScript,
   sandboxArguments,
   seedProfiles,
   SizeSchema,
@@ -153,7 +155,7 @@ test("size bounds and capacity checks reject before native input; metrics distin
   assert.equal(metrics.screen.width, 1920);
 });
 
-test("inspection stays read-only, bounded, unique and password-redacted; distinguishes hidden/offscreen/covered", () => {
+test("inspection and targeted failure evidence stay read-only, bounded, unique and password-redacted", async (testContext) => {
   class Element {
     tagName = "BUTTON";
     parentElement = null;
@@ -201,6 +203,9 @@ test("inspection stays read-only, bounded, unique and password-redacted; disting
     querySelectorAll() {
       return controls;
     }
+    querySelector() {
+      return this === root ? controls[0] : null;
+    }
   }
   const root = new Element("root");
   const password = new Element("password");
@@ -238,30 +243,118 @@ test("inspection stays read-only, bounded, unique and password-redacted; disting
     scrollX: 0,
     scrollY: 10,
   };
-  const inspect = (includeHidden: boolean, limit = 20) =>
-    vm.runInNewContext(
-      `(${inspectDom.toString()})("body", ${limit}, ["color"], ${includeHidden})`,
-      context,
-    ) as ReturnType<typeof inspectDom>;
+  const inspect = (includeHidden: boolean, limit = 20, geometry = true) =>
+    vm.runInNewContext(`(function () { ${pageScript(inspectDom)} }).apply(null, args)`, {
+      ...context,
+      args: ["body", { limit, styles: ["color"], includeHidden, geometry }],
+    }) as ReturnType<typeof inspectDom>;
   const result = inspect(true);
   assert.equal(result.total, 6);
   assert.ok(!JSON.stringify(result).includes(password.value));
   assert.equal(result.elements[1].value, "[redacted]");
   assert.equal(result.elements[1].focused, true);
-  assert.equal(result.elements[1].center_hit.status, "uncovered");
-  assert.equal(result.elements[2].center_hit.status, "hidden");
-  assert.equal(result.elements[3].center_hit.status, "outside-viewport");
+  assert.equal(result.elements[1].center_hit!.status, "uncovered");
+  assert.equal(result.elements[2].center_hit!.status, "hidden");
+  assert.equal(result.elements[3].center_hit!.status, "outside-viewport");
   assert.equal(result.elements[3].visible, true);
-  assert.equal(result.elements[4].center_hit.status, "covered");
+  assert.equal(result.elements[4].center_hit!.status, "covered");
   assert.equal(result.elements[4].inViewport, true);
-  assert.equal(result.elements[4].bounds.width, 100);
+  assert.equal(result.elements[4].bounds!.width, 100);
   assert.equal(result.elements[4].styles!.color.length, 500);
-  assert.equal(result.elements[4].scroll.top, 3);
+  assert.equal(result.elements[4].scroll!.top, 3);
   assert.equal(result.elements[5].value, 0);
   assert.equal(inspect(false).total, 5);
   assert.equal(inspect(true, 2).elements.length, 2);
+  const compact = inspect(true, 20, false);
+  assert.equal(compact.hit_test_note, undefined);
+  assert.ok(compact.elements.every((element) => !element.bounds && !element.center_hit));
+  assert.equal(compact.elements[0].text, undefined); // Root text is already top-level text.
+  assert.equal(compact.elements[1].value, "[redacted]");
+  assert.equal(compact.elements[1].focused, true);
+  assert.equal(compact.elements[1].hidden, undefined);
+  assert.equal(compact.elements[2].hidden, true);
+  assert.equal(compact.elements[3].offscreen, true);
+  assert.equal(compact.elements[4].disabled, undefined);
+  assert.equal(compact.elements[4].text, "button");
   roots = [root, root];
-  assert.throws(() => inspect(true), /matched 2 elements/);
+  assert.throws(
+    () => inspect(true),
+    /ambiguous: matched 2 elements; narrow the CSS selector\. First matches: \[data-testid="root"\] "button"; /,
+  );
+  roots = [];
+  assert.throws(
+    () => inspect(true),
+    /Target absent: body\. Current URL: tauri:\/\/localhost\. inspect does not wait/,
+  );
+  roots = [root];
+
+  const base = path.join(tmpdir(), "opencode");
+  await mkdir(base, { recursive: true });
+  const gui = new NativeGuiSession();
+  gui.workspace = await mkdtemp(path.join(base, "native-gui-target-test-"));
+  try {
+    const diagnostics = await gui.diagnostics();
+    testContext.mock.method(gui, "diagnostics", async () => diagnostics);
+    const png = Buffer.alloc(24);
+    Buffer.from("89504e470d0a1a0a", "hex").copy(png);
+    png.write("IHDR", 12);
+    Object.defineProperties(gui, {
+      connection: { value: {} },
+      probe: {
+        value: async (command: string, body?: { script: string; args: unknown[] }) => {
+          if (command === "screenshot") return png.toString("base64");
+          assert.equal(command, "execute/sync");
+          return vm.runInNewContext(`(function () { ${body!.script} }).apply(null, args)`, {
+            ...context,
+            args: body!.args,
+          });
+        },
+      },
+    });
+    const evidence = await gui.failureEvidence('[data-testid="hidden"]');
+    assert.deepEqual(evidence.errors, []);
+    assert.equal(evidence.artifacts.length, 3);
+    assert.ok(evidence.target?.inspection);
+    const target = evidence.target.inspection;
+    assert.equal(target.elements.length, 1);
+    assert.equal(target.elements[0].selector, '[data-testid="hidden"]');
+    assert.equal(target.elements[0].visible, false);
+    assert.equal(target.elements[0].center_hit!.status, "hidden");
+    assert.ok("pointer-events" in target.elements[0].styles!);
+    const body = JSON.parse(
+      await readFile(
+        evidence.artifacts.find((file) => file.endsWith(".dom.json"))!,
+        "utf8",
+      ),
+    );
+    assert.ok(
+      !body.elements.some((element: { selector: string }) => element.selector.includes("hidden")),
+    );
+    assert.ok(!JSON.stringify(body).includes(password.value));
+    const late = new Element("late-target", 300);
+    late.disabled = true;
+    controls.push(...Array.from({ length: 40 }, (_, i) => new Element(`filler-${i}`)), late);
+    const outsideBody = await gui.failureEvidence('[data-testid="late-target"]');
+    const limitedBody = JSON.parse(
+      await readFile(
+        outsideBody.artifacts.find((file) => file.endsWith(".dom.json"))!,
+        "utf8",
+      ),
+    );
+    assert.equal(limitedBody.elements.length, 40);
+    assert.ok(!JSON.stringify(limitedBody).includes("late-target"));
+    assert.equal(outsideBody.target?.inspection?.elements[0].disabled, true);
+    assert.equal(outsideBody.target?.inspection?.elements[0].bounds!.x, 300);
+    assert.equal(outsideBody.target?.inspection?.elements[0].center_hit!.status, "covered");
+    const redacted = await gui.failureEvidence('[data-testid="password"]');
+    assert.equal(redacted.target?.inspection?.elements[0].value, "[redacted]");
+    const missing = await gui.failureEvidence("#missing");
+    assert.match(missing.target?.unavailable ?? "", /Target absent: #missing/);
+    assert.deepEqual(missing.errors, []);
+    assert.equal(missing.artifacts.length, 3);
+  } finally {
+    await rm(gui.workspace, { recursive: true, force: true });
+  }
 });
 
 test("log tails bound reads at source, reject path/symlink escapes and retain diagnostics after close", async () => {
@@ -317,6 +410,33 @@ test("log tails bound reads at source, reject path/symlink escapes and retain di
     const evidence = await gui.failureEvidence();
     assert.equal(evidence.artifacts.length, 0);
     assert.match(evidence.errors.join(" "), /Symlinked/);
+
+    const xkb = [
+      "The XKEYBOARD keymap compiler (xkbcomp) reports:",
+      "> Warning:          Could not resolve keysym XF86CameraAccessEnable",
+      "> Warning:          Could not resolve keysym XF86AutopilotEngageToggle",
+      "> Warning:          Could not resolve keysym XF86NavInfo",
+      "Errors from xkbcomp are not fatal to the X server",
+    ].join("\n");
+    const summary = "[Known nonfatal XKB keysym warnings omitted; original driver.log unchanged]";
+    const raw = `X11 connection failed\n${xkb}\nWebDriverError: click failed\n${xkb}\n`;
+    await writeFile(filename, raw);
+    const expected = raw.replaceAll(xkb, summary).trimEnd();
+    assert.equal((await tailLog(workspace, "driver.log")).text, expected);
+    assert.equal((await gui.diagnostics()).logs[0].text, expected);
+    assert.equal((await gui.failureEvidence()).diagnostics.logs[0].text, expected);
+    assert.equal(await readFile(filename, "utf8"), raw);
+    await writeFile(path.join(workspace, "app.log"), raw);
+    assert.equal((await tailLog(workspace, "app.log")).text, raw.trimEnd());
+    for (const block of [
+      xkb.replace("XF86NavInfo", "XF86UnknownFutureKey"),
+      xkb.replace("reports:\n", "reports:\n> Error: keymap compilation failed\n"),
+      xkb.slice(0, xkb.lastIndexOf("\n")),
+      xkb.slice(xkb.indexOf("\n") + 1),
+    ]) {
+      await writeFile(filename, block);
+      assert.equal((await tailLog(workspace, "driver.log")).text, block);
+    }
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -337,10 +457,12 @@ test("unresponsive cached browser is not live; diagnostics and failure probes ha
   gui.workspace = await mkdtemp(path.join(base, "native-gui-dead-test-"));
   try {
     const start = Date.now();
-    const evidence = await gui.failureEvidence();
+    const evidence = await gui.failureEvidence("#target");
     assert.equal(evidence.diagnostics.live.reachable, false);
     assert.equal(evidence.diagnostics.driver.process_running, false);
     assert.equal(evidence.errors.length, 2);
+    assert.equal(evidence.target?.selector, "#target");
+    assert.ok(evidence.target?.unavailable);
     assert.equal(evidence.artifacts.length, 1); // Offline diagnostics still saved.
     assert.ok(Date.now() - start < 5000, "Evidence inherited an unbounded browser timeout.");
   } finally {
@@ -353,13 +475,13 @@ test("unresponsive cached browser is not live; diagnostics and failure probes ha
   }
 });
 
-test("tool failure keeps original error if evidence fails; session queues and evidence stay separate", async (context) => {
-  const captured: NativeGuiSession[] = [];
+test("tool failure forwards its selector and keeps original error if evidence fails; sessions stay separate", async (context) => {
+  const captured: { gui: NativeGuiSession; selector: string | undefined }[] = [];
   context.mock.method(
     NativeGuiSession.prototype,
     "failureEvidence",
-    async function (this: NativeGuiSession) {
-      captured.push(this);
+    async function (this: NativeGuiSession, selector?: string) {
+      captured.push({ gui: this, selector });
       throw new Error("capture failed");
     },
   );
@@ -369,24 +491,110 @@ test("tool failure keeps original error if evidence fails; session queues and ev
   await server.connect(b);
   await client.connect(a);
   try {
-    for (const session of ["a", "b", "a"]) {
+    for (const [session, selector] of [
+      ["a", "#first"],
+      ["b", "#second"],
+      ["a", "#third"],
+    ]) {
       const result = await client.callTool({
         name: "click",
-        arguments: { selector: "body" },
+        arguments: { selector },
         _meta: { "ai.opencode/sessionID": session },
       });
       assert.equal(result.isError, true);
       const value = JSON.parse((result.content as { text: string }[])[0].text);
       assert.equal(value.error, "Launch the native GUI first.");
+      assert.equal(value.input, "not_sent");
       assert.equal(value.evidence.unavailable, "capture failed");
     }
-    assert.notEqual(captured[0], captured[1]);
-    assert.equal(captured[0], captured[2]);
+    assert.notEqual(captured[0].gui, captured[1].gui);
+    assert.equal(captured[0].gui, captured[2].gui);
+    assert.deepEqual(
+      captured.map((entry) => entry.selector),
+      ["#first", "#second", "#third"],
+    );
   } finally {
     await shutdown();
     await client.close();
     await server.close();
   }
+});
+
+test("input failures report delivery phase; successful input returns observed state", async (context) => {
+  context.mock.method(NativeGuiSession.prototype, "failureEvidence", async () => ({}));
+  const observe = context.mock.method(NativeGuiSession.prototype, "observe", async () => ({
+    route: "/overview",
+    focus: '[data-testid="save"]',
+  }));
+  let failure: Error | undefined;
+  context.mock.method(NativeGuiSession.prototype, "click", async function (this: NativeGuiSession) {
+    if (failure) await this.dispatch(async () => Promise.reject(failure));
+  });
+  const { server, shutdown } = createServer();
+  const client = new Client({ name: "input-phase-test", version: "1" });
+  const [a, b] = InMemoryTransport.createLinkedPair();
+  await server.connect(b);
+  await client.connect(a);
+  const call = async (name: string, args: Record<string, unknown>) => {
+    const result = await client.callTool({ name, arguments: args });
+    return {
+      isError: result.isError,
+      value: JSON.parse((result.content as { text: string }[])[0].text),
+    };
+  };
+  try {
+    assert.deepEqual(await call("click", { selector: "#save" }), {
+      isError: undefined,
+      value: { clicked: "#save", observed: { route: "/overview", focus: '[data-testid="save"]' } },
+    });
+    assert.deepEqual(observe.mock.calls[0].arguments, []);
+    failure = new Error("native click failed");
+    const sent = await call("click", { selector: "#save" });
+    assert.equal(sent.isError, true);
+    assert.equal(sent.value.error, "native click failed");
+    assert.equal(sent.value.input, "possibly_sent");
+    assert.equal(observe.mock.callCount(), 1); // No observation replaces a failed input.
+    const inspected = await call("inspect", {});
+    assert.equal(inspected.isError, true);
+    assert.ok(!("input" in inspected.value));
+  } finally {
+    await shutdown();
+    await client.close();
+    await server.close();
+  }
+});
+
+test("observed state reports route, non-body focus and redacted target values", () => {
+  const input = { type: "password", value: "secret", getAttribute: () => "pw" };
+  const document = {
+    body: {},
+    activeElement: input,
+    querySelectorAll: (css: string) =>
+      css === "#pw" || css === '[data-testid="pw"]'
+        ? [input]
+        : css === "#many"
+          ? [input, input]
+          : [],
+  };
+  // JSON round trip mirrors WebDriver result serialization.
+  const observe = (selector: string | null) =>
+    JSON.parse(
+      JSON.stringify(
+        vm.runInNewContext(`(function () { ${pageScript(observeState)} }).apply(null, args)`, {
+          args: [selector],
+          document,
+          location: { hash: "#/overview" },
+        }),
+      ),
+    ) as ReturnType<typeof observeState>;
+  assert.deepEqual(observe("#pw"), {
+    route: "/overview",
+    focus: '[data-testid="pw"]',
+    value: "[redacted]",
+  });
+  assert.equal(observe("#many").value, null);
+  document.activeElement = document.body as typeof input;
+  assert.deepEqual(observe(null), { route: "/overview", focus: null });
 });
 
 test("launch errors reuse evidence captured before driver cleanup", async (context) => {
@@ -548,7 +756,21 @@ test("element helper waits for async existence, rejects ambiguity and optionally
   };
   Object.defineProperty(gui, "browser", {
     value: {
-      execute: async () => count,
+      execute: async (script: unknown, selector: string) =>
+        typeof script === "string"
+          ? vm.runInNewContext(`(function () { ${script} }).apply(null, args)`, {
+              args: [selector],
+              HTMLElement: class {},
+              document: {
+                querySelectorAll: () =>
+                  ["save", "cancel"].map((name) => ({
+                    tagName: "BUTTON",
+                    innerText: ` ${name}\n button `,
+                    getAttribute: (key: string) => (key === "data-testid" ? name : null),
+                  })),
+              },
+            })
+          : count,
       $: () => element,
       waitUntil: async (condition: () => Promise<boolean>) => {
         calls.push("wait");
@@ -561,7 +783,10 @@ test("element helper waits for async existence, rejects ambiguity and optionally
   assert.equal(await gui.element("#target"), element);
   assert.deepEqual(calls, ["visible", { block: "center", inline: "center" }]);
   count = 2;
-  await assert.rejects(gui.element("button"), /matched 2 elements/);
+  await assert.rejects(
+    gui.element("button"),
+    /matched 2 elements; narrow the CSS selector\. First matches: button:nth-of-type\(1\) "save button"; button:nth-of-type\(1\) "cancel button"/,
+  );
   count = 0;
   calls.length = 0;
   assert.equal(await gui.element("#later", false), element);
