@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Badge, Card, Checkbox, Group, Stack, Text, Tooltip } from "@mantine/core";
+import { Badge, Button, Card, Checkbox, Group, Stack, Text, Tooltip } from "@mantine/core";
 import {
   IconBook,
   IconCheck,
@@ -221,37 +221,53 @@ export default function PopulationSection() {
   }, [logs]);
 
   return (
-    <Card withBorder p="md" data-testid="population-section">
+    <Card withBorder p="md" className="processing-population" data-testid="population-section">
       <Stack gap="sm">
-        <Text fw={600} size="sm">
-          Population Analysis
-        </Text>
+        <Group justify="space-between" align="flex-start" gap="md" data-testid="population-content">
+          <Stack gap={4} className="processing-population-summary" data-testid="population-summary">
+            <Group gap="xs" align="center" data-testid="population-heading">
+              <Text fw={600} size="sm">
+                Population analysis
+              </Text>
+              <Badge size="xs" variant="light" color="gray">
+                Study-level · separate run
+              </Badge>
+              <Group gap={4} align="center" data-testid="population-status-row">
+                <Text size="xs">Status:</Text>
+                <PopulationStatusIcon status={popDisplayStatus} processingPhase={processingPhase} />
+              </Group>
+            </Group>
 
-        <Group gap="xs" align="center" data-testid="population-status-row">
-          <Text size="sm">Population Module Status:</Text>
-          <PopulationStatusIcon status={popDisplayStatus} processingPhase={processingPhase} />
+            <Text size="sm" data-testid="population-eligibility">
+              {eligibleCount} of {totalCount} sessions ready (Structural and ASL complete)
+            </Text>
+          </Stack>
+
+          <Stack gap="xs" className="processing-population-option" data-testid="population-option">
+            <Tooltip label={tooltipLabel} disabled={!tooltipLabel} withinPortal>
+              <div>
+                <Checkbox
+                  label="Enable population analysis"
+                  checked={populationSelected}
+                  onChange={handleToggle}
+                  disabled={checkboxDisabled}
+                  aria-describedby={tooltipLabel ? "population-disabled-reason" : undefined}
+                  data-testid="population-checkbox"
+                />
+              </div>
+            </Tooltip>
+            {tooltipLabel && (
+              <Text
+                size="xs"
+                c="dimmed"
+                id="population-disabled-reason"
+                data-testid="population-disabled-reason"
+              >
+                {tooltipLabel}
+              </Text>
+            )}
+          </Stack>
         </Group>
-
-        <Text size="sm" data-testid="population-eligibility">
-          {eligibleCount}/{totalCount} subjects eligible (structural + ASL complete)
-        </Text>
-
-        <Text size="xs" c="dimmed">
-          Population analysis requires at least one subject/session with both Structural and ASL
-          modules complete. Population runs independently and cannot be combined with other modules.
-        </Text>
-
-        <Tooltip label={tooltipLabel} disabled={!tooltipLabel} withinPortal>
-          <div style={{ display: "inline-block" }}>
-            <Checkbox
-              label="Enable population analysis"
-              checked={populationSelected}
-              onChange={handleToggle}
-              disabled={checkboxDisabled}
-              data-testid="population-checkbox"
-            />
-          </div>
-        </Tooltip>
 
         <Group gap="xs" align="center">
           <Text size="xs" c="dimmed">
@@ -277,25 +293,22 @@ export default function PopulationSection() {
           <Text size="xs" c="dimmed">
             — Configured in Parameters
           </Text>
-        </Group>
-
-        <Group>
           {!hasLog ? (
             <Text size="xs" c="dimmed" data-testid="population-no-logs">
               No Logs
             </Text>
           ) : (
-            <Badge
-              size="sm"
+            <Button
+              size="xs"
+              mih={32}
               color={hasError ? "red" : "teal"}
               variant="outline"
-              leftSection={<IconBook size={12} />}
-              style={{ cursor: "pointer" }}
+              leftSection={<IconBook size={14} />}
               onClick={handleViewLog}
               data-testid={hasError ? "population-error-btn" : "population-log-btn"}
             >
               {hasError ? "View Errors" : "View Logs"}
-            </Badge>
+            </Button>
           )}
         </Group>
       </Stack>

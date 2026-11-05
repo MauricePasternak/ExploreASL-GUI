@@ -105,19 +105,21 @@ export default function PipelineConfig() {
         spacing="md"
         data-testid="processing-pipeline-config-grid"
       >
-        <ProfileSelector
-          value={config.selectedProfileId}
-          onChange={handleProfileChange}
-          disabled={executionProfiles.length === 0}
-        />
+        <div className="processing-profile-field" data-testid="processing-profile-field">
+          <ProfileSelector
+            value={config.selectedProfileId}
+            onChange={handleProfileChange}
+            disabled={executionProfiles.length === 0}
+          />
+        </div>
 
         <div data-testid="processing-pipeline-config-modules-section">
           <Group gap="xs" align="center" mb="xs" style={{ display: "inline-flex" }}>
             <Text fw={600} size="sm" data-testid="processing-pipeline-config-modules-label">
-              Modules
+              What to process
             </Text>
             <FieldInfoIcon
-              tooltipLabel="Select which pipeline modules to run. 'Structural' processes anatomical scans, and 'ASL' processes functional perfusion scans."
+              tooltipLabel="Structural processes anatomy images. ASL processes blood-flow images."
               aria-label="Info for Modules"
               data-testid="pipeline-modules-info"
               onClick={(e) => {
@@ -144,21 +146,18 @@ export default function PipelineConfig() {
                 />
               );
             })}
+          </Stack>
+        </div>
 
-            <Group gap="xs" align="flex-start" mt="xs" wrap="nowrap">
-              <Checkbox
-                label="Force re-sync between imported/BIDS data and preliminary ExploreASL derivatives"
-                styles={{ label: { whiteSpace: "normal", wordBreak: "break-word" } }}
-                checked={config.rerunBids2Legacy ?? false}
-                onChange={(e) => handleRerunBids2LegacyToggle(e.currentTarget.checked)}
-                disabled={!config.modules.includes("structural") && !config.modules.includes("asl")}
-                data-testid="rerun-bids2legacy-checkbox"
-              />
-              <span style={{ marginTop: 2, display: "inline-flex" }}>
+        <div className="processing-workers-field" data-testid="processing-workers-field">
+          <NumberInput
+            label={
+              <Group gap="xs" align="center" style={{ display: "inline-flex" }}>
+                <span>Parallel workers</span>
                 <FieldInfoIcon
-                  tooltipLabel="If checked, the app will force a re-synchronization of the raw imported/BIDS data with the initial ExploreASL derivatives. This is necessary if the raw source files (i.e. BIDS folders) have been altered after the initial import."
-                  aria-label="Info for rerun BIDS2Legacy"
-                  data-testid="pipeline-force-resync-info"
+                  tooltipLabel="Workers process different sessions at the same time."
+                  aria-label="Info for Workers"
+                  data-testid="pipeline-workers-info"
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
@@ -168,42 +167,46 @@ export default function PipelineConfig() {
                     e.stopPropagation();
                   }}
                 />
-              </span>
-            </Group>
-          </Stack>
+              </Group>
+            }
+            description={`Up to ${systemCores || 4} workers`}
+            value={config.workers}
+            onChange={handleWorkersChange}
+            min={1}
+            max={systemCores || 4}
+            clampBehavior="strict"
+            {...numberInputTestIds("worker-count-input")}
+          />
         </div>
 
-        <NumberInput
-          label={
-            <Group gap="xs" align="center" style={{ display: "inline-flex" }}>
-              <span>Workers</span>
-              <FieldInfoIcon
-                tooltipLabel="Number of parallel workers. Multiple workers allow processing different subject-session datasets simultaneously."
-                aria-label="Info for Workers"
-                data-testid="pipeline-workers-info"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                }}
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                }}
-              />
-            </Group>
-          }
-          description={
-            config.subjects.length > 0 && config.workers > config.subjects.length
-              ? `Default: ${defaultWorkers} | Max: ${systemCores} cores (capped to ${config.subjects.length} active worker${config.subjects.length > 1 ? "s" : ""} for selected subject${config.subjects.length > 1 ? "s" : ""})`
-              : `Default: ${defaultWorkers} | Max: ${systemCores} cores`
-          }
-          value={config.workers}
-          onChange={handleWorkersChange}
-          min={1}
-          max={systemCores || 4}
-          clampBehavior="strict"
-          {...numberInputTestIds("worker-count-input")}
-        />
+        <details className="processing-resync" data-testid="processing-resync-details">
+          <summary>
+            Source file changes{config.rerunBids2Legacy ? " · Rebuild enabled" : ""}
+          </summary>
+          <Group gap="xs" align="flex-start" mt="xs" wrap="nowrap">
+            <Checkbox
+              label="Rebuild converted data from source files"
+              styles={{ label: { whiteSpace: "normal", wordBreak: "break-word" } }}
+              checked={config.rerunBids2Legacy ?? false}
+              onChange={(e) => handleRerunBids2LegacyToggle(e.currentTarget.checked)}
+              disabled={!config.modules.includes("structural") && !config.modules.includes("asl")}
+              data-testid="rerun-bids2legacy-checkbox"
+            />
+            <FieldInfoIcon
+              tooltipLabel="Use this if source files changed after you set up this project."
+              aria-label="Info for rerun BIDS2Legacy"
+              data-testid="pipeline-force-resync-info"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+              }}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+              }}
+            />
+          </Group>
+        </details>
       </SimpleGrid>
     </Stack>
   );

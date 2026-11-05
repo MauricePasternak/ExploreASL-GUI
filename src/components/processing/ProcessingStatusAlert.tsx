@@ -118,13 +118,13 @@ export default function ProcessingStatusAlert({ onResult }: ProcessingStatusAler
 
     if (configSubjects?.length && workers > configSubjects.length) {
       warnings.push(
-        `Spawning fewer workers (${configSubjects.length}) than configured (${workers}) because only ${configSubjects.length} subject${configSubjects.length > 1 ? "s are" : " is"} selected.`,
+        `Only ${configSubjects.length} worker${configSubjects.length === 1 ? "" : "s"} will run for ${configSubjects.length} selected session${configSubjects.length === 1 ? "" : "s"}.`,
       );
     }
 
     if (orphanedSubjects.length > 0) {
       warnings.push(
-        `Found ${orphanedSubjects.length} orphaned lock file entr${orphanedSubjects.length === 1 ? "y" : "ies"} with no matching rawdata subject: ${orphanedSubjects.slice(0, 5).join(", ")}${orphanedSubjects.length > 5 ? ` (+${orphanedSubjects.length - 5} more)` : ""}`,
+        `${orphanedSubjects.length} session${orphanedSubjects.length === 1 ? "" : "s"} in earlier processing results ${orphanedSubjects.length === 1 ? "is" : "are"} not in this project: ${orphanedSubjects.slice(0, 5).join(", ")}${orphanedSubjects.length > 5 ? ` (+${orphanedSubjects.length - 5} more)` : ""}`,
       );
     }
 
@@ -163,7 +163,7 @@ export default function ProcessingStatusAlert({ onResult }: ProcessingStatusAler
       : state === "warning"
         ? "yellow"
         : state === "ready"
-          ? "teal"
+          ? "blue"
           : "gray";
   const icon = renderIcon(state);
 
@@ -171,14 +171,15 @@ export default function ProcessingStatusAlert({ onResult }: ProcessingStatusAler
     <Alert
       color={color}
       icon={icon}
+      title={state === "error" ? "Resolve before starting" : undefined}
       variant="light"
       data-testid="processing-status-alert"
       data-state={state}
     >
-      {state === "idle" && <Text size="sm">Select the Modules and Subject/Sessions to run</Text>}
+      {state === "idle" && <Text size="sm">Choose what you want to process.</Text>}
       {state === "error" && renderMessageList(result.errors)}
       {state === "warning" && renderMessageList(result.warnings)}
-      {state === "ready" && <Text size="sm">All checks passed. Ready to process.</Text>}
+      {state === "ready" && <Text size="xs">Selection checks passed.</Text>}
     </Alert>
   );
 }

@@ -146,8 +146,8 @@ describe("ControlButtons kill confirmation", () => {
 
     await user.click(screen.getByTestId("stop-btn"));
 
-    expect(await screen.findByText("Stop Processing")).toBeInTheDocument();
-    expect(await screen.findByText(/stop all running processing jobs/i)).toBeInTheDocument();
+    expect(await screen.findByRole("dialog", { name: "Stop processing" })).toBeInTheDocument();
+    expect(await screen.findByText(/stop this run/i)).toBeInTheDocument();
   });
 
   it("calls killProcessing when confirm button clicked", async () => {
@@ -177,7 +177,17 @@ describe("ControlButtons native lifecycle controls", () => {
     mockActiveRunId = "processing-run-1";
     mockAvailableAction = "stop";
   });
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockActionPending = false;
+  });
+
+  it("disables Stop unless the attached native run permits it", () => {
+    mockPhase = "running";
+    mockAvailableAction = "none";
+    renderButtons();
+    expect(screen.getByTestId("stop-btn")).toBeDisabled();
+  });
 
   it.each([
     ["preparing", null],
@@ -280,6 +290,8 @@ describe("ControlButtons Start button disabled state", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockPhase = "idle";
+    mockAvailableAction = "stop";
+    mockActionPending = false;
   });
 
   it("enables Start button when startDisabled is false", () => {
@@ -374,7 +386,7 @@ describe("ControlButtons re-process confirmation", () => {
     await user.click(screen.getByTestId("start-btn"));
 
     expect(
-      await screen.findByText(/re-processing will overwrite their existing output/i),
+      await screen.findByText(/starting again will overwrite their existing results/i),
     ).toBeInTheDocument();
     expect(screen.getByText("sub-001_01")).toBeInTheDocument();
     expect(screen.getByTestId("confirm-reprocess-cancel")).toBeInTheDocument();

@@ -34,13 +34,13 @@ function ConfirmReprocessDialog({
     <Modal
       opened={opened}
       onClose={onClose}
-      title="Re-process completed subjects?"
+      title="Run completed subjects again?"
       data-testid="confirm-reprocess-dialog"
       attributes={{ close: { "data-testid": "confirm-reprocess-dialog-close" } }}
     >
       <Text size="sm">
-        The following {entries.length} subject(s) have already completed processing for the selected
-        module(s). Re-processing will overwrite their existing output.
+        {entries.length} subject{entries.length === 1 ? " has" : "s have"} already finished the
+        selected modules. Starting again will overwrite their existing results.
       </Text>
       <div
         style={{
@@ -66,7 +66,7 @@ function ConfirmReprocessDialog({
           Cancel
         </Button>
         <Button color="orange" onClick={onConfirm} data-testid="confirm-reprocess-confirm">
-          Re-process anyway
+          Run again
         </Button>
       </Group>
     </Modal>
@@ -186,21 +186,26 @@ const ControlButtons = memo(function ControlButtons({
         <Button
           leftSection={<Icon size={16} />}
           color={color}
+          variant={isStartAction ? "filled" : "light"}
           onClick={handleClick}
           disabled={
-            action === "wait" || (isStartAction && (startDisabled || terminalRunId !== null))
+            action === "wait" ||
+            (action === "kill" &&
+              ((availableAction !== "stop" && availableAction !== "retryCleanup") ||
+                actionPending)) ||
+            (isStartAction && (startDisabled || terminalRunId !== null))
           }
           data-testid={isStartAction ? "start-btn" : "stop-btn"}
         >
-          {label}
+          {action === "kill" && phase === "running" ? "Stop processing" : label}
         </Button>
       </Group>
 
       {availableAction === "confirmStopped" ? (
         <Stack gap="xs" data-testid="processing-interruption-confirmation">
           <Text size="sm">
-            ExploreASL GUI stopped unexpectedly. MATLAB or Apptainer may still be running. Check
-            operating-system process tools, stop any remaining worker, then confirm.
+            The app closed unexpectedly. MATLAB or Apptainer may still be running. Use your system's
+            process manager to stop them before confirming.
           </Text>
           <Button
             color="yellow"
@@ -208,7 +213,7 @@ const ControlButtons = memo(function ControlButtons({
             disabled={actionPending}
             data-testid="confirm-processing-stopped-btn"
           >
-            I confirmed workers stopped
+            I checked that processing has stopped
           </Button>
         </Stack>
       ) : null}
@@ -216,14 +221,18 @@ const ControlButtons = memo(function ControlButtons({
       <Modal
         opened={confirmOpen}
         onClose={handleCancelKill}
-        title="Stop Processing"
+        title={availableAction === "retryCleanup" ? "Retry cleanup" : "Stop processing"}
         size="sm"
         data-testid="stop-confirm-modal"
         attributes={{ close: { "data-testid": "stop-confirm-modal-close" } }}
         returnFocus={false}
       >
         <Stack gap="md">
-          <Text size="sm">Stop all running processing jobs? This cannot be undone.</Text>
+          <Text size="sm">
+            {availableAction === "retryCleanup"
+              ? "Try finishing cleanup for this run?"
+              : "Stop this run? Work in progress will stop."}
+          </Text>
           <Group justify="flex-end" gap="sm">
             <Button
               variant="default"
@@ -239,7 +248,7 @@ const ControlButtons = memo(function ControlButtons({
               onClick={handleConfirmKill}
               data-testid="stop-confirm-btn"
             >
-              Stop
+              {availableAction === "retryCleanup" ? "Retry cleanup" : "Stop"}
             </Button>
           </Group>
         </Stack>

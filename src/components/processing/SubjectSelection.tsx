@@ -1,16 +1,12 @@
-import { Badge, Box, Button, Group, SegmentedControl, Stack, Text, Tooltip } from "@mantine/core";
+import { Box, Button, Group, SegmentedControl, Stack, Text, Tooltip } from "@mantine/core";
 import { segmentedControlTestIds } from "../common/segmentedControlTestIds";
 import {
   IconAlertCircle,
   IconBan,
-  IconBook,
   IconCheck,
   IconExclamationMark,
   IconLoader,
   IconMinus,
-  IconSelector,
-  IconSquareCheck,
-  IconSquareX,
 } from "@tabler/icons-react";
 import { DataTable, type DataTableColumn } from "mantine-datatable";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -28,6 +24,14 @@ import { resolveLogBadge, resolveModuleDisplay } from "./SubjectSelection.helper
 import { indexSubjectStatuses } from "./subjectStatusIndex";
 
 type FilterValue = "all" | "pending" | "incomplete" | "complete";
+
+const STATUS_LABELS: Record<ModuleDisplayStatus, string> = {
+  complete: "Complete",
+  incomplete: "Incomplete",
+  pending: "Pending",
+  outdated: "Outdated",
+  skipped: "No data",
+};
 
 interface SubjectRow extends SubjectInfo {
   /** selected in checkbox */
@@ -148,178 +152,96 @@ function buildColumns(
         </Text>
       ),
     },
-    {
-      accessor: "_structuralStatus",
-      title: (
-        <>
-          Structural
-          <br />
-          Status
-        </>
-      ),
-      textAlign: "center",
-      render: (row) => (
-        <StatusIcon status={row._structuralStatus} processingPhase={processingPhase} />
-      ),
-    },
-    {
-      accessor: "_structuralLogInfo",
-      title: (
-        <>
-          Structural
-          <br />
-          Logs/Errors
-        </>
-      ),
-      textAlign: "center",
-      render: (row) => {
-        if (row._structuralStatus === "skipped") return null;
-        const files = structuralLogInfo.get(row.subjectSession);
-        const badge = resolveLogBadge(row._structuralStatus, files);
-        if (badge === "no-logs") {
-          return (
-            <Text size="xs" c="dimmed" data-testid="no-structural-logs">
-              No Logs
-            </Text>
-          );
-        }
-        const isError = badge === "errors";
-        return (
-          <Badge
-            size="sm"
-            color={isError ? "red" : "teal"}
-            variant="outline"
-            leftSection={<IconBook size={12} />}
-            style={{ cursor: "pointer" }}
-            onClick={() => onViewLog(row.subjectSession, "structural")}
-            data-testid={isError ? "view-structural-errors" : "view-structural-logs"}
+    ...(
+      [
+        {
+          module: "structural",
+          label: "Structural",
+          statusKey: "_structuralStatus",
+          logs: structuralLogInfo,
+        },
+        { module: "asl", label: "ASL", statusKey: "_aslStatus", logs: aslLogInfo },
+      ] as const
+    ).flatMap<DataTableColumn<SubjectRow>>(({ module, label, statusKey, logs }) => [
+      {
+        accessor: statusKey,
+        title: <>Status</>,
+        textAlign: "center",
+        render: (row) => (
+          <Group
+            gap={4}
+            wrap="nowrap"
+            className={`processing-status processing-status--${row[statusKey]}`}
+            data-testid={`${module}-display-status`}
           >
-            {isError ? "View Errors" : "View Logs"}
-          </Badge>
-        );
-      },
-    },
-    {
-      accessor: "_structuralReport",
-      title: (
-        <>
-          Structural
-          <br />
-          Report
-        </>
-      ),
-      textAlign: "center",
-      render: (row) => {
-        if (row._structuralStatus === "skipped") return null;
-        const hasReport = existingReports.has(`${row.subjectSession}:structural`);
-        if (!hasReport) {
-          return (
-            <Text size="xs" c="dimmed" data-testid="no-structural-report">
-              No Report
+            <StatusIcon status={row[statusKey]} processingPhase={processingPhase} />
+            <Text size="xs" data-testid={`${module}-status-label`}>
+              {STATUS_LABELS[row[statusKey]]}
             </Text>
-          );
-        }
-        const isOutdated = row._structuralStatus === "outdated";
-        return (
-          <Badge
-            size="sm"
-            color={isOutdated ? "orange" : "blue"}
-            variant="outline"
-            style={{ cursor: "pointer" }}
-            onClick={() => onViewReport(row.subjectSession, "structural")}
-            data-testid="view-structural-report"
-          >
-            {isOutdated ? "View Outdated Report" : "View Report"}
-          </Badge>
-        );
+          </Group>
+        ),
       },
-    },
-    {
-      accessor: "_aslStatus",
-      title: (
-        <>
-          ASL
-          <br />
-          Status
-        </>
-      ),
-      textAlign: "center",
-      render: (row) => <StatusIcon status={row._aslStatus} processingPhase={processingPhase} />,
-    },
-    {
-      accessor: "_aslLogInfo",
-      title: (
-        <>
-          ASL
-          <br />
-          Logs/Errors
-        </>
-      ),
-      textAlign: "center",
-      render: (row) => {
-        if (row._aslStatus === "skipped") return null;
-        const files = aslLogInfo.get(row.subjectSession);
-        const badge = resolveLogBadge(row._aslStatus, files);
-        if (badge === "no-logs") {
+      {
+        accessor: `_${module}LogInfo`,
+        title: <>Logs / errors</>,
+        textAlign: "center",
+        render: (row) => {
+          if (row[statusKey] === "skipped") return null;
+          const badge = resolveLogBadge(row[statusKey], logs.get(row.subjectSession));
+          if (badge === "no-logs") {
+            return (
+              <Text size="xs" c="dimmed" data-testid={`no-${module}-logs`}>
+                No Logs
+              </Text>
+            );
+          }
+          const isError = badge === "errors";
           return (
-            <Text size="xs" c="dimmed" data-testid="no-asl-logs">
-              No Logs
-            </Text>
+            <Button
+              size="compact-xs"
+              color={isError ? "red" : "teal"}
+              variant="subtle"
+              onClick={() => onViewLog(row.subjectSession, module)}
+              aria-label={`View ${label} ${isError ? "errors" : "logs"} for ${row.subjectSession}`}
+              data-testid={`view-${module}-${isError ? "errors" : "logs"}`}
+            >
+              {isError ? "View Errors" : "View Logs"}
+            </Button>
           );
-        }
-        const isError = badge === "errors";
-        return (
-          <Badge
-            size="sm"
-            color={isError ? "red" : "teal"}
-            variant="outline"
-            leftSection={<IconBook size={12} />}
-            style={{ cursor: "pointer" }}
-            onClick={() => onViewLog(row.subjectSession, "asl")}
-            data-testid={isError ? "view-asl-errors" : "view-asl-logs"}
-          >
-            {isError ? "View Errors" : "View Logs"}
-          </Badge>
-        );
+        },
       },
-    },
-    {
-      accessor: "_aslReport",
-      title: (
-        <>
-          ASL
-          <br />
-          Report
-        </>
-      ),
-      textAlign: "center",
-      render: (row) => {
-        if (row._aslStatus === "skipped") return null;
-        const hasReport =
-          existingReports.has(`${row.subjectSession}:asl`) ||
-          existingReports.has(`${row.subjectSession}:m0`);
-        if (!hasReport) {
+      {
+        accessor: `_${module}Report`,
+        title: <>Report</>,
+        textAlign: "center",
+        render: (row) => {
+          if (row[statusKey] === "skipped") return null;
+          const hasReport =
+            existingReports.has(`${row.subjectSession}:${module}`) ||
+            (module === "asl" && existingReports.has(`${row.subjectSession}:m0`));
+          if (!hasReport) {
+            return (
+              <Text size="xs" c="dimmed" data-testid={`no-${module}-report`}>
+                No Report
+              </Text>
+            );
+          }
+          const isOutdated = row[statusKey] === "outdated";
           return (
-            <Text size="xs" c="dimmed" data-testid="no-asl-report">
-              No Report
-            </Text>
+            <Button
+              size="compact-xs"
+              color={isOutdated ? "orange" : "blue"}
+              variant="subtle"
+              onClick={() => onViewReport(row.subjectSession, module)}
+              aria-label={`View ${isOutdated ? "outdated " : ""}${label} report for ${row.subjectSession}`}
+              data-testid={`view-${module}-report`}
+            >
+              {isOutdated ? "View Outdated Report" : "View Report"}
+            </Button>
           );
-        }
-        const isOutdated = row._aslStatus === "outdated";
-        return (
-          <Badge
-            size="sm"
-            color={isOutdated ? "orange" : "blue"}
-            variant="outline"
-            style={{ cursor: "pointer" }}
-            onClick={() => onViewReport(row.subjectSession, "asl")}
-            data-testid="view-asl-report"
-          >
-            {isOutdated ? "View Outdated Report" : "View Report"}
-          </Badge>
-        );
+        },
       },
-    },
+    ]),
   ];
 }
 
@@ -422,7 +344,8 @@ export default function SubjectSelection() {
     return filteredRows.slice(from, from + recordsPerPage);
   }, [filteredRows, page, recordsPerPage]);
 
-  const selectedRecords = useMemo(() => paginatedRows.filter((r) => r._selected), [paginatedRows]);
+  const selectedRecords = useMemo(() => rows.filter((r) => r._selected), [rows]);
+  const subjectCount = new Set(availableSubjects.map((subject) => subject.subject)).size;
 
   const updateSubjects = useCallback(
     (next: string[] | ((subjects: string[]) => string[])) => {
@@ -517,26 +440,25 @@ export default function SubjectSelection() {
   }, [rows]);
 
   return (
-    <Stack gap="sm" data-testid="subject-selection">
+    <Stack gap="sm" className="processing-roster" data-testid="subject-selection">
       <Group justify="space-between" align="center">
-        <Text fw={600} size="sm">
-          Select Subject/Session Entries
-        </Text>
+        <Stack gap={4} data-testid="subject-selection-heading">
+          <Text fw={600} size="sm" data-testid="subject-selection-title">
+            Subject / session selection
+          </Text>
+          <Text size="xs" c="dimmed" aria-live="polite" data-testid="subject-selection-count">
+            {selectedRecords.length} of {rows.length} sessions selected · {subjectCount} subject
+            {subjectCount === 1 ? "" : "s"} available
+          </Text>
+        </Stack>
         <Group gap="xs">
-          <Button
-            size="xs"
-            variant="light"
-            leftSection={<IconSquareCheck size={14} />}
-            onClick={handleSelectAll}
-            data-testid="select-all-btn"
-          >
+          <Button size="xs" variant="subtle" onClick={handleSelectAll} data-testid="select-all-btn">
             Select all
           </Button>
           <Button
             size="xs"
-            variant="light"
-            color="red"
-            leftSection={<IconSquareX size={14} />}
+            variant="subtle"
+            color="gray"
             onClick={handleDeselectAll}
             data-testid="deselect-all-btn"
           >
@@ -545,10 +467,16 @@ export default function SubjectSelection() {
         </Group>
       </Group>
 
-      <Group gap="xs" align="center">
-        <IconSelector size={16} color="var(--mantine-color-dimmed)" />
+      <Group
+        gap="xs"
+        align="center"
+        wrap="nowrap"
+        className="processing-filter-scroll"
+        data-testid="subject-filter-scroll"
+      >
         <SegmentedControl
           size="xs"
+          fullWidth
           value={filter}
           onChange={(val) => setFilter(val as FilterValue)}
           data={FILTER_OPTIONS.map((opt) => ({
@@ -558,9 +486,9 @@ export default function SubjectSelection() {
                 <Text size="xs" style={{ whiteSpace: "nowrap" }}>
                   {opt.label}
                 </Text>
-                <Badge size="xs" variant="light">
-                  {statusCounts[opt.value]}
-                </Badge>
+                <Text size="xs" c="dimmed">
+                  · {statusCounts[opt.value]}
+                </Text>
               </Stack>
             ),
           }))}
@@ -571,7 +499,23 @@ export default function SubjectSelection() {
       <Box style={{ flexShrink: 0, isolation: "isolate" }} data-testid="subject-table-container">
         <DataTable
           records={paginatedRows}
-          columns={columns}
+          groups={[
+            { id: "subject-session", title: "Subject / Session", columns: columns.slice(0, 2) },
+            {
+              id: "structural",
+              title: "Structural",
+              textAlign: "center",
+              className: "processing-table-structural",
+              columns: columns.slice(2, 5),
+            },
+            {
+              id: "asl",
+              title: "ASL",
+              textAlign: "center",
+              className: "processing-table-asl",
+              columns: columns.slice(5),
+            },
+          ]}
           selectedRecords={selectedRecords}
           onSelectedRecordsChange={handleSelectedRecordsChange}
           allRecordsSelectionCheckboxProps={{
@@ -600,6 +544,9 @@ export default function SubjectSelection() {
           data-testid="subject-table"
         />
       </Box>
+      <Text size="xs" c="dimmed" data-testid="subject-selection-filter-note">
+        Filters don't change your selection. Select all includes all {rows.length} sessions.
+      </Text>
       <LogViewerModal {...logModal} runErrorMap={modalRunErrorMap} />
       <ReportViewerModal {...reportModal} />
     </Stack>

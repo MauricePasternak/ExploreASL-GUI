@@ -153,7 +153,7 @@ describe("PopulationSection", () => {
 
     renderSection();
     expect(screen.getByTestId("population-eligibility")).toHaveTextContent(
-      "2/5 subjects eligible (structural + ASL complete)",
+      "2 of 5 sessions ready (Structural and ASL complete)",
     );
   });
 

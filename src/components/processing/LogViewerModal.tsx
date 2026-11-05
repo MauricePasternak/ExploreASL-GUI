@@ -177,6 +177,7 @@ export default function LogViewerModal({
           <>
             {showSelect && (
               <Select
+                aria-label="ASL log run"
                 data={runOptions.map((o) => ({
                   value: o.value,
                   label: o.label,
@@ -206,7 +207,7 @@ export default function LogViewerModal({
               style={{
                 maxHeight: "70vh",
                 overflow: "auto",
-                backgroundColor: "var(--mantine-color-gray-0)",
+                backgroundColor: "var(--mantine-color-default-hover)",
                 borderRadius: "var(--mantine-radius-sm)",
                 padding: "var(--mantine-spacing-xs)",
               }}
@@ -222,15 +223,15 @@ export default function LogViewerModal({
                     style={
                       line.type === "error"
                         ? {
-                            backgroundColor: "var(--mantine-color-red-1)",
-                            color: "var(--mantine-color-red-9)",
+                            backgroundColor: "var(--mantine-color-red-light)",
+                            color: "var(--mantine-color-red-light-color)",
                             padding: "0 4px",
                             borderRadius: 2,
                           }
                         : line.type === "warning"
                           ? {
-                              backgroundColor: "var(--mantine-color-yellow-1)",
-                              color: "var(--mantine-color-yellow-9)",
+                              backgroundColor: "var(--mantine-color-yellow-light)",
+                              color: "var(--mantine-color-yellow-light-color)",
                               padding: "0 4px",
                               borderRadius: 2,
                             }

@@ -1,5 +1,4 @@
-import { Card, Center, RingProgress, Stack, Text } from "@mantine/core";
-import { IconBrain } from "@tabler/icons-react";
+import { Card, Group, Loader, Stack, Text } from "@mantine/core";
 
 import { useProcessingStore } from "../../stores/processingStore";
 
@@ -7,57 +6,33 @@ export default function PreparingTransition() {
   const preparingMessage = useProcessingStore((s) => s.preparingMessage);
 
   return (
-    <Center style={{ flex: 1, minHeight: 400 }} data-testid="preparing-transition">
-      <Card
-        shadow="md"
-        padding="xl"
-        radius="lg"
-        withBorder
-        w={400}
-        style={{
-          background: "var(--mantine-color-body)",
-          borderColor: "var(--mantine-color-default-border)",
-        }}
-      >
-        <Stack align="center" gap="lg" py="md">
-          <div className="spin-forward" data-testid="preparing-ring-container">
-            <RingProgress
-              size={140}
-              thickness={8}
-              sections={[{ value: 35, color: "teal" }]}
-              data-testid="preparing-ring"
-              label={
-                <Center className="spin-reverse">
-                  <IconBrain
-                    size={48}
-                    color="var(--mantine-color-teal-filled)"
-                    className="pulse-icon"
-                    data-testid="preparing-brain-icon"
-                  />
-                </Center>
-              }
-            />
-          </div>
+    <Card
+      padding="md"
+      radius="md"
+      withBorder
+      data-testid="preparing-transition"
+      style={{
+        background: "var(--mantine-color-body)",
+        borderColor: "var(--mantine-color-default-border)",
+      }}
+    >
+      <Group gap="md" wrap="nowrap" data-testid="preparing-content">
+        <Loader
+          size={48}
+          color="teal"
+          aria-label="Preparing processing"
+          data-testid="preparing-ring"
+        />
 
-          <Stack gap="xs" align="center">
-            <Text size="lg" fw={600} ta="center" data-testid="preparing-title">
-              Preparing Pipeline
-            </Text>
-            <Text
-              size="sm"
-              c="dimmed"
-              ta="center"
-              data-testid="preparing-message"
-              style={{ minHeight: 20 }}
-            >
-              {preparingMessage ?? "Setting up execution environment..."}
-            </Text>
-            <Text size="xs" c="dimmed" ta="center" mt="xs">
-              Please wait while ExploreASL initializes.
-            </Text>
-          </Stack>
+        <Stack gap={4} data-testid="preparing-copy">
+          <Text size="sm" fw={600} data-testid="preparing-title">
+            Preparing processing
+          </Text>
+          <Text size="sm" c="dimmed" data-testid="preparing-message" style={{ minHeight: 20 }}>
+            {preparingMessage ?? "Getting ready to start..."}
+          </Text>
         </Stack>
-      </Card>
-    </Center>
+      </Group>
+    </Card>
   );
 }

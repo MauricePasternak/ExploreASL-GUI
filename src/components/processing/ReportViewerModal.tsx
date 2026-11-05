@@ -84,7 +84,7 @@ function ImageCard({
   return (
     <Box
       style={{
-        border: "1px solid var(--mantine-color-gray-3)",
+        border: "1px solid var(--mantine-color-default-border)",
         borderRadius: "var(--mantine-radius-sm)",
         overflow: "hidden",
       }}
@@ -94,8 +94,8 @@ function ImageCard({
         size="sm"
         fw={600}
         p="xs"
-        bg="var(--mantine-color-gray-1)"
-        style={{ borderBottom: "1px solid var(--mantine-color-gray-3)" }}
+        bg="var(--mantine-color-default-hover)"
+        style={{ borderBottom: "1px solid var(--mantine-color-default-border)" }}
       >
         {title}
       </Text>
@@ -227,6 +227,7 @@ export default function ReportViewerModal({
               Select Run:
             </Text>
             <Select
+              aria-label="ASL report run"
               data={runs.map((r) => ({ value: r, label: `Run ${r}` }))}
               value={selectedRun}
               onChange={(val) => setSelectedRun(val || "1")}
@@ -361,7 +362,7 @@ export default function ReportViewerModal({
           ) : qcMeasures.length > 0 ? (
             <Box
               style={{
-                border: "1px solid var(--mantine-color-gray-3)",
+                border: "1px solid var(--mantine-color-default-border)",
                 borderRadius: "var(--mantine-radius-sm)",
                 overflow: "hidden",
               }}

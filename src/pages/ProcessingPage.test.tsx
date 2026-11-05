@@ -4,6 +4,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useProcessingStore } from "../stores/processingStore";
 import type { ProcessConfig } from "../schemas/processingSchemas";
+import { processingSnapshot } from "../test/processingFixtures";
+import type { LogFileInfo } from "../lib/logViewer";
+import type { ReportFileInfo } from "../lib/reportViewer";
+
+const evidence = vi.hoisted(() => ({ logs: [] as LogFileInfo[], reports: [] as ReportFileInfo[] }));
 
 const { mockProject, mockSettings, mockValidationState, mockGetProfileById, mockHasValidProfile } =
   vi.hoisted(() => {
@@ -58,7 +63,8 @@ vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn((cmd: string) => {
     if (cmd === "get_cpu_cores") return Promise.resolve(8);
     if (cmd === "get_available_memory_mb") return Promise.resolve(16384);
-    if (cmd === "list_module_logs") return Promise.resolve([]);
+    if (cmd === "list_module_logs") return Promise.resolve(evidence.logs);
+    if (cmd === "list_subject_reports") return Promise.resolve(evidence.reports);
     return Promise.resolve(null);
   }),
 }));
@@ -109,9 +115,13 @@ describe("ProcessingPage", () => {
   });
 
   beforeEach(() => {
+    evidence.logs = [];
+    evidence.reports = [];
     mockProject.project.uiState.processing.config = DEFAULT_CONFIG;
     useProcessingStore.setState({
       processingPhase: "idle",
+      snapshot: null,
+      activeRunId: null,
       availableSubjects: DEFAULT_SUBJECTS,
       subjectStatuses: [],
     });
@@ -121,7 +131,7 @@ describe("ProcessingPage", () => {
     renderPage();
     expect(screen.getByTestId("processing-page")).toBeInTheDocument();
     expect(screen.getByTestId("subject-selection")).toBeInTheDocument();
-    expect(screen.getByText("Select Subject/Session Entries")).toBeInTheDocument();
+    expect(screen.getByText("Subject / session selection")).toBeInTheDocument();
     const subjectSelection = screen.getByTestId("subject-selection");
     expect(within(subjectSelection).queryByText(/Population/i)).not.toBeInTheDocument();
 
@@ -142,6 +152,74 @@ describe("ProcessingPage", () => {
     expect(screen.getByTestId("report-viewer-modal")).toBeInTheDocument();
   });
 
+  it("presents compact setup hierarchy with grouped module columns", () => {
+    renderPage();
+    const header = screen.getByTestId("processing-header");
+    expect(within(header).getByRole("heading", { name: "Processing" })).toBeInTheDocument();
+    expect(header).toHaveTextContent("Choose subjects and settings for the next run.");
+    expect(screen.getByTestId("processing-settings-heading")).toHaveTextContent("NEXT RUN");
+    expect(screen.getByTestId("processing-settings-content")).toHaveClass(
+      "processing-settings-content--config",
+    );
+    expect(screen.getByText("What to process")).toBeInTheDocument();
+    expect(screen.getByText("Parallel workers")).toBeInTheDocument();
+    expect(screen.getByTestId("processing-resync-details")).not.toHaveAttribute("open");
+    const table = screen.getByTestId("subject-table");
+    expect(within(table).getByRole("columnheader", { name: "Structural" })).toBeInTheDocument();
+    expect(within(table).getByRole("columnheader", { name: "ASL" })).toBeInTheDocument();
+  });
+
+  it("preserves per-module errors, M0-only ASL reports, unavailable evidence and skipped controls", async () => {
+    evidence.logs = [
+      {
+        filename: "asl.log",
+        module: "asl",
+        subjectSession: "sub-001_01",
+        run: undefined,
+        hasError: false,
+      },
+    ];
+    evidence.reports = [{ module: "m0", subjectSession: "sub-001_01", run: undefined }];
+    useProcessingStore.setState({
+      subjectStatuses: [
+        {
+          subjectSession: "sub-001_01",
+          module: "structural",
+          status: "incomplete",
+          completedSteps: [],
+          locked: false,
+        },
+        {
+          subjectSession: "sub-001_01",
+          module: "asl",
+          status: "outdated",
+          completedSteps: [],
+          locked: false,
+        },
+      ],
+    });
+    renderPage();
+    expect(
+      await screen.findByRole("button", { name: "View outdated ASL report for sub-001_01" }),
+    ).toHaveTextContent("View Outdated Report");
+    expect(
+      screen.getByRole("button", { name: "View Structural errors for sub-001_01" }),
+    ).toHaveTextContent("View Errors");
+    expect(screen.getByRole("button", { name: "View ASL logs for sub-001_01" })).toHaveTextContent(
+      "View Logs",
+    );
+    const first = within(screen.getByRole("row", { name: /001 01/ }));
+    expect(first.getByTestId("structural-status-label")).toHaveTextContent("Incomplete");
+    expect(first.getByTestId("asl-status-label")).toHaveTextContent("Outdated");
+    expect(first.getByTestId("no-structural-report")).toHaveTextContent("No Report");
+    const second = within(screen.getByRole("row", { name: /002 01/ }));
+    expect(second.getByTestId("structural-status-label")).toHaveTextContent("No data");
+    expect(second.queryByTestId("no-structural-logs")).not.toBeInTheDocument();
+    expect(second.queryByTestId("no-structural-report")).not.toBeInTheDocument();
+    expect(second.getByTestId("no-asl-logs")).toHaveTextContent("No Logs");
+    expect(second.getByTestId("no-asl-report")).toHaveTextContent("No Report");
+  });
+
   it("does not show orphaned subjects warning for population module status", () => {
     useProcessingStore.setState({
       subjectStatuses: [
@@ -156,7 +234,7 @@ describe("ProcessingPage", () => {
     });
     renderPage();
     const alert = screen.getByTestId("processing-status-alert");
-    expect(alert).not.toHaveTextContent(/orphaned lock file entr/i);
+    expect(alert).not.toHaveTextContent(/session in earlier processing results/i);
   });
 
   it("shows orphaned subjects warning for non-population module with unknown subject", async () => {
@@ -174,8 +252,9 @@ describe("ProcessingPage", () => {
     renderPage();
     await waitFor(() => {
       const alert = screen.getByTestId("processing-status-alert");
-      expect(alert).toHaveTextContent(/orphaned lock file entr/i);
-      expect(alert).toHaveTextContent("1 orphaned lock file entry");
+      expect(alert).toHaveTextContent(
+        "1 session in earlier processing results is not in this project",
+      );
     });
   });
 
@@ -223,6 +302,12 @@ describe("ProcessingPage", () => {
     it("renders PreparingTransition when phase is preparing", () => {
       useProcessingStore.setState({
         processingPhase: "preparing",
+        activeRunId: "processing-run-1",
+        snapshot: processingSnapshot({
+          runId: "processing-run-1",
+          selectedModules: ["structural", "asl"],
+          selectedSubjectSessions: ["sub-001_01"],
+        }),
         preparingMessage: "Generating participants list...",
       });
       renderPage();
@@ -244,7 +329,7 @@ describe("ProcessingPage", () => {
 
       expect(screen.getByTestId("preparing-transition")).toBeInTheDocument();
       expect(screen.getByTestId("preparing-message")).toHaveTextContent(
-        "Setting up execution environment...",
+        "Getting ready to start...",
       );
     });
   });
@@ -252,10 +337,29 @@ describe("ProcessingPage", () => {
   it.each(["running", "finalizing", "cancelling"] as const)(
     "keeps the attached dashboard visible during %s",
     (processingPhase) => {
-      useProcessingStore.setState({ processingPhase, activeRunId: "processing-run-1" });
+      useProcessingStore.setState({
+        processingPhase,
+        activeRunId: "processing-run-1",
+        snapshot: processingSnapshot({
+          runId: "processing-run-1",
+          lifecycle: processingPhase,
+          selectedModules: ["structural", "asl"],
+          selectedSubjectSessions: ["sub-001_01"],
+          workerCount: 1,
+        }),
+      });
       renderPage();
       expect(screen.getByTestId("execution-dashboard")).toBeInTheDocument();
       expect(screen.queryByTestId("pipeline-config")).not.toBeInTheDocument();
+      expect(screen.getByTestId("processing-reserved-modules")).toHaveTextContent(
+        "Structural + ASL · 1 session",
+      );
+      if (processingPhase === "running") {
+        expect(screen.getByTestId("processing-live-status")).toHaveTextContent(
+          "Processing is running",
+        );
+        expect(screen.getByTestId("stop-btn")).toHaveTextContent("Stop processing");
+      }
     },
   );
 

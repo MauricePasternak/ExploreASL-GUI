@@ -84,7 +84,7 @@ describe("ProcessingStatusAlert", () => {
       renderAlert();
       const alert = screen.getByTestId("processing-status-alert");
       expect(alert.getAttribute("data-state")).toBe("idle");
-      expect(alert).toHaveTextContent(/Select the Modules and Subject\/Sessions to run/i);
+      expect(alert).toHaveTextContent("Choose what you want to process.");
     });
   });
 
@@ -261,7 +261,9 @@ describe("ProcessingStatusAlert", () => {
           "warning",
         );
       });
-      expect(screen.getByText(/Spawning fewer workers/i)).toBeInTheDocument();
+      expect(
+        screen.getByText(/Only 1 worker will run for 1 selected session/i),
+      ).toBeInTheDocument();
     });
 
     it("shows yellow warning for orphaned subjects in subjectStatuses", async () => {
@@ -279,7 +281,9 @@ describe("ProcessingStatusAlert", () => {
           "warning",
         );
       });
-      expect(screen.getByText(/orphaned lock file entr/i)).toBeInTheDocument();
+      expect(
+        screen.getByText(/session in earlier processing results is not in this project/i),
+      ).toBeInTheDocument();
     });
   });
 
@@ -297,7 +301,7 @@ describe("ProcessingStatusAlert", () => {
           "ready",
         );
       });
-      expect(screen.getByText(/All checks passed/i)).toBeInTheDocument();
+      expect(screen.getByText(/Selection checks passed/i)).toBeInTheDocument();
     });
 
     it("does not show ready when warnings present", async () => {
@@ -313,7 +317,7 @@ describe("ProcessingStatusAlert", () => {
           "warning",
         );
       });
-      expect(screen.queryByText(/All checks passed/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Selection checks passed/i)).not.toBeInTheDocument();
     });
   });
 

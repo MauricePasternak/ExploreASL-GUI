@@ -143,18 +143,12 @@ describe("PipelineConfig", () => {
 
     it("renders rerun BIDS2Legacy checkbox", () => {
       renderConfig();
-      expect(
-        screen.getByLabelText(
-          "Force re-sync between imported/BIDS data and preliminary ExploreASL derivatives",
-        ),
-      ).toBeInTheDocument();
+      expect(screen.getByLabelText("Rebuild converted data from source files")).toBeInTheDocument();
     });
 
     it("calls setConfig when checkbox is clicked", () => {
       renderConfig();
-      const checkbox = screen.getByLabelText(
-        "Force re-sync between imported/BIDS data and preliminary ExploreASL derivatives",
-      );
+      const checkbox = screen.getByLabelText("Rebuild converted data from source files");
       fireEvent.click(checkbox);
 
       expect(mockSetConfig).toHaveBeenCalled();
@@ -171,9 +165,7 @@ describe("PipelineConfig", () => {
         rerunBids2Legacy: false,
       };
       renderConfig();
-      const checkbox = screen.getByLabelText(
-        "Force re-sync between imported/BIDS data and preliminary ExploreASL derivatives",
-      );
+      const checkbox = screen.getByLabelText("Rebuild converted data from source files");
       expect(checkbox).toBeDisabled();
     });
   });
