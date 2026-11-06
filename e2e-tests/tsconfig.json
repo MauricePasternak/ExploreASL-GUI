@@ -10,5 +10,5 @@
     "types": ["node", "@wdio/globals/types", "@wdio/mocha-framework"],
     "outDir": "dist"
   },
-  "include": ["test/**/*.ts", "wdio.conf.ts", "wdio.config.helpers.ts"]
+  "include": ["test/**/*.ts", "wdio*.ts", "run-full-analysis.ts"]
 }

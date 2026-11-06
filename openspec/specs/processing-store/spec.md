@@ -210,6 +210,12 @@ The store SHALL maintain `subjectStatuses` as an array of `SubjectModuleStatus` 
 - **WHEN** an accepted native target snapshot includes step code `999_ready` for any module/subject
 - **THEN** the matching displayed `SubjectModuleStatus` SHALL have `status` set to `complete` without independently setting the run outcome
 
+#### Scenario: Separate Population run retains subject progress
+
+- **WHEN** a Population-only run is reserved, projected, settled and acknowledged after completed Structural and ASL work
+- **THEN** existing subject-module statuses SHALL remain displayed and available for Population eligibility; only Population target progress SHALL be replaced by the new run
+- **AND** this retention SHALL NOT restore historical Population target progress or change subject-module rerun invalidation
+
 ### Requirement: Last Run Config Persistence
 
 Accepted processing selections SHALL persist under `uiState.processing.config`, using `selectedProfileId`, and accepted native terminal phases SHALL persist under `uiState.processing.currentPhase`. The form SHALL read one accepted project configuration, not an independently editable persisted mirror. Selection edits SHALL preserve structural, ASL, and Population completion/provenance. A missing saved profile SHALL show "Profile not found" and disable Start until a valid profile is selected. Existing application startup/open/create profile gating SHALL remain unchanged.

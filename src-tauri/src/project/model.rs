@@ -437,13 +437,6 @@ pub enum CaslType {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
-pub enum BolusCutOffTechnique {
-    Q2TIPS,
-    QUIPSS,
-    QUIPSSII,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
 pub enum M0Type {
     Separate,
     Included,
@@ -492,7 +485,7 @@ pub struct BidsMetadata {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub BolusCutOffDelayTime: Option<NumberOrArray>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub BolusCutOffTechnique: Option<BolusCutOffTechnique>,
+    pub BolusCutOffTechnique: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub BackgroundSuppression: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]

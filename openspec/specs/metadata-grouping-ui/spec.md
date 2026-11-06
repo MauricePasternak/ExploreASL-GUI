@@ -150,6 +150,20 @@ The `refineBidsMetadata` superRefine is preserved (rules reference `"Included"` 
 - **WHEN** schema validates `M0Type: "Included"` (ds000240 sidecar value)
 - **THEN** validation passes (matches enum)
 
+### Requirement: Bolus cut-off technique is free text
+
+Native scan validation, persisted project metadata, form validation, and studyPar validation SHALL accept `BolusCutOffTechnique` as an optional string, not an exclusive enum. The editor SHALL allow free text and show `Q2TIPS`, `QUIPSS`, and `QUIPSSII` as examples. Supplied strings SHALL be preserved without substitution. Existing conditional presence and timing checks remain unchanged; accepting a name does not validate its scientific meaning.
+
+#### Scenario: Non-example technique survives review and persistence
+
+- **WHEN** otherwise valid metadata contains `BolusCutOffTechnique: "PICORE"`
+- **THEN** native scan, modal editing, project save/reopen, and studyPar assembly SHALL preserve that string
+
+#### Scenario: Non-string technique is rejected
+
+- **WHEN** form or persisted project metadata supplies a number, boolean, array, or object for `BolusCutOffTechnique`
+- **THEN** typed validation SHALL reject the non-string value
+
 ### Requirement: Bolus cut-off timings are independent of PLD volumes
 
 Metadata validation SHALL interpret `BolusCutOffDelayTime` as saturation-pulse timings, not per-volume delays. Values SHALL be finite, non-negative, and monotonically increasing; existing seconds-range sanity checks remain applicable. Validation SHALL NOT require matching lengths or zero positions with `PostLabelingDelay`. Field instructions SHALL explain that Q2TIPS uses only the first and last saturation-pulse timings.

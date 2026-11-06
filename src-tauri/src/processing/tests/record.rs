@@ -706,6 +706,59 @@ fn compaction_retries_every_published_boundary_and_releases_current() {
 }
 
 #[test]
+fn assembled_configuration_uses_executor_root_without_mutating_reserved_configuration() {
+    use crate::execution::profile::ExecutionProfile;
+
+    let temp = tempfile::tempdir().unwrap();
+    project(temp.path());
+    let input = request(temp.path());
+    let matlab = input.execution_profile.clone();
+    let apptainer = ExecutionProfile::Apptainer {
+        id: "container".into(),
+        label: "Apptainer".into(),
+        sif_path: "unused.sif".into(),
+        apptainer_path: "unused".into(),
+        explore_asl_version: None,
+    };
+    let host_root = temp.path().to_str().unwrap();
+    for (source, profile, expected) in [
+        ("bids", matlab.clone(), Some(host_root)),
+        ("bids", apptainer.clone(), Some("/data")),
+        ("dicom", matlab, None),
+        ("dicom", apptainer, None),
+    ] {
+        let mut record = ProcessingRecord::new(
+            temp.path(),
+            input.clone(),
+            expected_targets(&input, &[]).unwrap(),
+        )
+        .unwrap();
+        record.data_source = source.into();
+        record.request.execution_profile = profile;
+        for stale in [false, true] {
+            // Admission strips opts; also exercise assembly's stale-field replacement/removal.
+            if stale {
+                record.request.data_par["x"]["opts"] =
+                    serde_json::json!({"subjectFolder": "/stale/project"});
+            }
+            let reserved = record.request.data_par.clone();
+            let digest = request_digest(&record.request).unwrap();
+            let assembled = record.assembled_configuration().unwrap();
+            assert_eq!(
+                assembled["x"]["opts"].get("subjectFolder"),
+                expected.map(serde_json::Value::from).as_ref(),
+                "source={source}, profile={}, stale={stale}",
+                record.request.execution_profile.id(),
+            );
+            assert_eq!(record.request.data_par, reserved);
+            assert_eq!(request_digest(&record.request).unwrap(), digest);
+            assert_eq!(record.project_root, temp.path());
+            assert_eq!(record.request.project_root, temp.path());
+        }
+    }
+}
+
+#[test]
 fn native_destinations_are_canonical_before_storage_and_replay() {
     let temp = tempfile::tempdir().unwrap();
     project(temp.path());

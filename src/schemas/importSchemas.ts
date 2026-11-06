@@ -382,7 +382,7 @@ export const BidsAslMetadataBaseSchema = z
 
     // === PASL conditional (when BolusCutOffFlag=true) ===
     BolusCutOffDelayTime: CommaNumberSchema.optional(),
-    BolusCutOffTechnique: z.enum(["Q2TIPS", "QUIPSS", "QUIPSSII"]).optional(),
+    BolusCutOffTechnique: z.string().optional(),
 
     // === Recommended ===
     BackgroundSuppression: z.boolean().optional(),

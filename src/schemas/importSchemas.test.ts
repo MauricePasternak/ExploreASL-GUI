@@ -214,13 +214,25 @@ describe("BidsAslMetadataSchema", () => {
     expect(pasl.LabelingType).toBe("PASL");
   });
 
-  it("rejects invalid BolusCutOffTechnique", () => {
-    expect(() =>
-      BidsAslMetadataSchema.parse({
+  it.each(["Q2TIPS", "QUIPSS", "QUIPSSII", "PICORE", "Custom technique"])(
+    "preserves BolusCutOffTechnique string %s in metadata and studyPar",
+    (BolusCutOffTechnique) => {
+      const data = {
         ...validBase,
-        BolusCutOffTechnique: "InvalidTechnique" as any,
-      }),
-    ).toThrow();
+        ArterialSpinLabelingType: "PASL",
+        BolusCutOffFlag: true,
+        BolusCutOffDelayTime: 1.675,
+        BolusCutOffTechnique,
+      };
+      expect(BidsAslMetadataSchema.parse(data).BolusCutOffTechnique).toBe(BolusCutOffTechnique);
+      expect(StudyParEntrySchema.parse(data).BolusCutOffTechnique).toBe(BolusCutOffTechnique);
+    },
+  );
+
+  it.each([1, true, [], {}])("rejects non-string BolusCutOffTechnique %j", (value) => {
+    expect(
+      BidsAslMetadataSchema.safeParse({ ...validBase, BolusCutOffTechnique: value }).success,
+    ).toBe(false);
   });
 
   it("rejects invalid M0_GMScaleFactor <= 0", () => {

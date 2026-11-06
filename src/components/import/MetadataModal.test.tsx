@@ -325,6 +325,31 @@ describe("MetadataModal", () => {
     expect(queryTestId("field-bg-suppression-pulse-time").length).toBeGreaterThan(0);
   });
 
+  it("displays, edits and saves a free-text bolus cut-off technique unchanged", async () => {
+    const { onSubmit } = renderModal({
+      initialValues: {
+        label: "PASL",
+        bidsParams: {
+          ...validBidsParams,
+          ArterialSpinLabelingType: "PASL",
+          BolusCutOffFlag: true,
+          BolusCutOffDelayTime: 1.675,
+          BolusCutOffTechnique: "PICORE",
+        },
+      },
+    });
+    expect(testId("field-bolus-cutoff-technique")).toHaveValue("PICORE");
+    fireEvent.click(testId("modal-save-btn"));
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    expect(onSubmit.mock.calls[0][0].bidsParams.BolusCutOffTechnique).toBe("PICORE");
+    fireEvent.change(testId("field-bolus-cutoff-technique"), {
+      target: { value: "Custom technique" },
+    });
+    fireEvent.click(testId("modal-save-btn"));
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(2));
+    expect(onSubmit.mock.calls[1][0].bidsParams.BolusCutOffTechnique).toBe("Custom technique");
+  });
+
   it("shows slice timing when MR acquisition type is 2D", () => {
     renderModal({
       initialValues: {

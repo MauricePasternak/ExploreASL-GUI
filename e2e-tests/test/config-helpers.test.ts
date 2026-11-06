@@ -6,6 +6,7 @@ import test from "node:test";
 import path from "node:path";
 
 import {
+  assertTcpPortAvailable,
   createBuildArguments,
   createBuildEnvironment,
   resolveApplicationPath,
@@ -135,6 +136,19 @@ test("waits until the native driver port accepts connections", async () => {
       server.close((error) => (error ? reject(error) : resolve())),
     );
   }
+});
+
+test("rejects an occupied driver port instead of attaching to a foreign application", async () => {
+  const server = createServer();
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  assert.ok(address && typeof address !== "string");
+  try {
+    await assert.rejects(assertTcpPortAvailable("127.0.0.1", address.port), /already in use/);
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+  await assertTcpPortAvailable("127.0.0.1", address.port);
 });
 
 test("keeps artifact file names below filesystem limits", () => {

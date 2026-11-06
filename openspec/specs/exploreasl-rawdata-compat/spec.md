@@ -17,7 +17,7 @@ For both DICOM-import and BIDS-direct projects, root-level `<projectRoot>/partic
 
 ### Requirement: subjectFolder override injected into dataPar.json
 
-When native processing preparation assembles configuration for a project with `dataSource === "bids"`, the resulting `dataPar.json` MUST include the absolute path to the current project root directory in `x.opts.subjectFolder`:
+When native processing preparation assembles configuration for a project with `dataSource === "bids"`, the resulting `dataPar.json` MUST include the absolute path to the current project root directory in the executor's filesystem namespace in `x.opts.subjectFolder`, replacing any supplied value. MATLAB uses the current absolute host project root; Apptainer uses `/data`, the existing container binding of that same root. Assembly SHALL derive this field without mutating the reserved configuration or changing the host project identity. For example, with MATLAB:
 
 ```json
 {
@@ -31,19 +31,21 @@ When native processing preparation assembles configuration for a project with `d
 }
 ```
 
-For `dataSource === "dicom"` projects, `subjectFolder` is NOT injected; `dataPar.json` matches existing behavior.
+For `dataSource === "dicom"` projects, `subjectFolder` SHALL be omitted for both MATLAB and Apptainer, including when supplied in the incoming configuration; `dataPar.json` otherwise matches existing behavior.
 
 ExploreASL reads `x.opts.subjectFolder` in `xASL_init_SubjectList.m` and overrides `bids.layout()`'s scan path. The empty `rawdata/` directory satisfies `xASL_init_DataLoading.m`'s `xASL_exist(<root>/rawdata, 'dir')` check (verified mechanism).
 
 #### Scenario: BIDS-direct project processing
 
 - **WHEN** `startProcessing` runs on a BIDS-direct project (`dataSource = "bids"`)
-- **THEN** native preparation SHALL verify the existing compatibility directory without modifying it, write `dataPar.json` with `x.opts.subjectFolder = <rootPath>`, and launch ExploreASL to scan root-level `sub-*/`
+- **THEN** native preparation SHALL verify the existing compatibility directory without modifying it, write `dataPar.json` with `x.opts.subjectFolder` pointing to the current root in the executor's filesystem namespace, and launch ExploreASL to scan root-level `sub-*/`
+- **AND** MATLAB SHALL use the current absolute host root, while Apptainer SHALL use `/data`, regardless of any stale supplied `subjectFolder`
+- **AND** the reserved configuration and host project identity SHALL remain unchanged
 
 #### Scenario: DICOM project processing unchanged
 
-- **WHEN** `startProcessing` runs on a DICOM project (`dataSource = "dicom"`)
-- **THEN** BIDS compatibility verification SHALL NOT run and `dataPar.json` SHALL be written without `subjectFolder` (existing behavior preserved)
+- **WHEN** `startProcessing` runs on a DICOM project (`dataSource = "dicom"`) with either a MATLAB or Apptainer profile
+- **THEN** BIDS compatibility verification SHALL NOT run and `dataPar.json` SHALL be written without `subjectFolder`, even if a stale value was supplied (existing behavior preserved)
 
 ### Requirement: list_subjects refactored to parse_bids_structure
 

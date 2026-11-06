@@ -316,11 +316,11 @@ export default function MetadataModal({
 
               {aslType === "PASL" && bolusCutOffFlag && (
                 <>
-                  <BidsSelectField
+                  <BidsTextField
                     control={control}
                     name="bidsParams.BolusCutOffTechnique"
                     label="Bolus Cut Off Technique"
-                    data={["Q2TIPS", "QUIPSS", "QUIPSSII"]}
+                    placeholder="e.g., Q2TIPS, QUIPSS, QUIPSSII"
                     testId="field-bolus-cutoff-technique"
                   />
                   <BidsCommaNumberField

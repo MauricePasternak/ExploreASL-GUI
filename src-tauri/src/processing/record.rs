@@ -3,7 +3,10 @@ use super::{
     journal::{AUTHORITY, publish, relative},
     types::*,
 };
-use crate::{execution::profile::ExecutionProfile, fs_safety::ProjectDirectory};
+use crate::{
+    execution::{apptainer::CONTAINER_DATA_ROOT, profile::ExecutionProfile},
+    fs_safety::ProjectDirectory,
+};
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -381,9 +384,13 @@ impl ProcessingRecord {
             .context("Invalid reserved opts")?;
         opts.remove("subjectFolder");
         if self.data_source == "bids" {
+            let root = match &self.request.execution_profile {
+                ExecutionProfile::Matlab { .. } => self.project_root.as_path(),
+                ExecutionProfile::Apptainer { .. } => Path::new(CONTAINER_DATA_ROOT),
+            };
             opts.insert(
                 "subjectFolder".into(),
-                self.project_root.to_string_lossy().to_string().into(),
+                root.to_string_lossy().to_string().into(),
             );
         }
         let mut dataset = serde_json::json!({"subjectRegexp": super::runs::selected_subject_sessions_regexp(&self.request.selected_subject_sessions)});

@@ -256,6 +256,34 @@ fn repair_root_must_match_native_active_project_ownership() {
 // --- scan_bids_sidecars tests ---
 
 #[test]
+fn scan_preserves_free_string_bolus_cut_off_techniques() {
+    let tmp = TempDir::new().unwrap();
+    create_bids_dataset(tmp.path(), 1, true);
+    let sidecar = tmp.path().join("sub-01/perf/sub-01_asl.json");
+    for technique in ["Q2TIPS", "QUIPSS", "QUIPSSII", "PICORE", "Custom technique"] {
+        let bytes = serde_json::to_vec(&serde_json::json!({
+            "ArterialSpinLabelingType": "PASL",
+            "BolusCutOffFlag": true,
+            "BolusCutOffDelayTime": 1.675,
+            "BolusCutOffTechnique": technique
+        }))
+        .unwrap();
+        fs::write(&sidecar, &bytes).unwrap();
+        let scan = scan_bids_sidecars_impl(tmp.path()).unwrap();
+        assert!(scan.skipped.is_empty());
+        assert_eq!(scan.groups.len(), 1);
+        assert_eq!(
+            scan.groups[0]
+                .bids_params
+                .bolus_cut_off_technique
+                .as_deref(),
+            Some(technique)
+        );
+        assert_eq!(fs::read(&sidecar).unwrap(), bytes);
+    }
+}
+
+#[test]
 fn committed_inheritance_fixture_has_expected_effective_metadata() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../test/fixtures/bids-inheritance");
     let detected = check_bids_dataset_impl(&root).unwrap();

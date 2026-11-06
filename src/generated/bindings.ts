@@ -487,7 +487,7 @@ export type BidsMetadata_Deserialize = {
   LabelingPulseInterval?: number | null;
   BolusCutOffFlag?: boolean | null;
   BolusCutOffDelayTime?: NumberOrArray | null;
-  BolusCutOffTechnique?: BolusCutOffTechnique | null;
+  BolusCutOffTechnique?: string | null;
   BackgroundSuppression?: boolean | null;
   BackgroundSuppressionNumberPulses?: number | null;
   BackgroundSuppressionPulseTime?: number[] | null;
@@ -522,7 +522,7 @@ export type BidsMetadata_Serialize = {
   LabelingPulseInterval?: number;
   BolusCutOffFlag?: boolean;
   BolusCutOffDelayTime?: NumberOrArray;
-  BolusCutOffTechnique?: BolusCutOffTechnique;
+  BolusCutOffTechnique?: string;
   BackgroundSuppression?: boolean;
   BackgroundSuppressionNumberPulses?: number;
   BackgroundSuppressionPulseTime?: number[];
@@ -579,8 +579,6 @@ export type BidsSidecarScan_Serialize = {
   groups: SidecarGroup_Serialize[];
   skipped: string[];
 };
-
-export type BolusCutOffTechnique = "Q2TIPS" | "QUIPSS" | "QUIPSSII";
 
 export type CaslType = "single-coil" | "double-coil";
 

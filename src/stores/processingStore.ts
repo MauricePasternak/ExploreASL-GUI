@@ -213,7 +213,13 @@ export const useProcessingStore = create<ProcessingState>((set) => {
         ? { bidsCompatibilityError: snapshot.error.message }
         : {}),
       ...(snapshot.expectedTargets.length > 0 || snapshot.executionCommitted
-        ? { subjectStatuses: statuses }
+        ? {
+            // Population preparation leaves subject-module statuses untouched.
+            subjectStatuses:
+              snapshot.selectedModules.length === 1 && snapshot.selectedModules[0] === "population"
+                ? [...state.subjectStatuses.filter((s) => s.module !== "population"), ...statuses]
+                : statuses,
+          }
         : {}),
     });
   };

@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import "@wdio/types";
 
 import {
+  assertTcpPortAvailable,
   createBuildArguments,
   createBuildEnvironment,
   resolveApplicationPath,
@@ -173,6 +174,8 @@ export const config: TauriConfig = {
   },
 
   beforeSession: async () => {
+    // Never attach to another driver's app/settings after our own driver fails to bind.
+    await assertTcpPortAvailable("127.0.0.1", 4444);
     const driverPath = getTauriDriverPath();
     assertExecutableExists(driverPath, "tauri-driver");
     stoppingDriver = false;

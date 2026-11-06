@@ -554,7 +554,7 @@ describe("assembleStudyPar", () => {
       {
         id: "bar-override",
         label: "BAR Override",
-        bidsParams: { ArterialSpinLabelingType: "PASL" },
+        bidsParams: { ArterialSpinLabelingType: "PASL", BolusCutOffTechnique: "PICORE" },
       },
     ];
     const rows: SubjectRow[] = [
@@ -568,6 +568,7 @@ describe("assembleStudyPar", () => {
     expect(result.StudyPars[0].ArterialSpinLabelingType).toBe("PCASL");
     expect(result.StudyPars[1].SubjectRegExp).toBe("^(BAR)$");
     expect(result.StudyPars[1].ArterialSpinLabelingType).toBe("PASL");
+    expect(result.StudyPars[1].BolusCutOffTechnique).toBe("PICORE");
   });
 
   it("splits subjects with different session profiles within same group", () => {

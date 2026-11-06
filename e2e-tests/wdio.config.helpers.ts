@@ -75,6 +75,22 @@ export function sanitizeArtifactName(name: string): string {
   );
 }
 
+export async function assertTcpPortAvailable(host: string, port: number): Promise<void> {
+  const server = net.createServer();
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", (error: NodeJS.ErrnoException) =>
+      reject(
+        error.code === "EADDRINUSE"
+          ? new Error(
+              `Native E2E driver port ${host}:${port} is already in use; stop its owner before retrying.`,
+            )
+          : error,
+      ),
+    );
+    server.listen(port, host, () => server.close((error) => (error ? reject(error) : resolve())));
+  });
+}
+
 // Unix drivers must be spawned detached so their process group belongs to this harness.
 export function signalDriver(driver: ChildProcess, signal: NodeJS.Signals): void {
   if (!driver.pid) return;
