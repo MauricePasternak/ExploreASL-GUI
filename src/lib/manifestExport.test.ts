@@ -89,7 +89,7 @@ function makeFixtureManifest(): ManifestPayload {
     pipelineParagraph:
       "This manifest covers 4 unique participants with 4 included subject-sessions across 3 groups.",
     ...(() => {
-      const methods = generateMethodsParagraph(getDefaultDataPar());
+      const methods = generateMethodsParagraph({ ...getDefaultDataPar(), bAutoACPC: true });
       return {
         methodsParagraphs: methods.paragraphs,
         methodsReferences: methods.references,

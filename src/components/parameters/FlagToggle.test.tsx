@@ -60,12 +60,11 @@ describe("FlagToggle", () => {
     expect(screen.getByTestId("field-bRegisterM02ASL")).not.toBeChecked();
   });
 
-  it("is checked when value is undefined with default=true", () => {
+  it("is checked when undefined motion correction uses native policy", () => {
     renderWithMantine(
       <FlagToggle
         fieldKey="motionCorrection"
         value={undefined}
-        defaultValue={true}
         onChange={() => {}}
         testId="field-motionCorrection"
       />,

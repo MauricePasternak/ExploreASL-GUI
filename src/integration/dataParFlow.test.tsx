@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import { activateProjectLease, resetProjectLifecycleForTests } from "../lib/projectLifecycle";
 import { projectFixture } from "../test/projectFixtures";
+import { PARAMETER_SWITCH_DEFAULTS } from "../generated/bindings";
 import { renderWithMantine } from "../test/render";
 
 import DataParEditor from "../components/parameters/DataParEditor";
@@ -52,9 +53,9 @@ describe("native accepted parameter flow", () => {
     before.document.dataPar = fields;
     useProjectStore.getState().acceptSnapshot(before);
     const pvc = { ...projectFixture(), acceptedRevision: 1 };
-    pvc.document.dataPar = { ...fields, bPVCNativeSpace: 0 };
+    pvc.document.dataPar = { ...PARAMETER_SWITCH_DEFAULTS, ...fields };
     const accepted = { ...projectFixture(), acceptedRevision: 2 };
-    accepted.document.dataPar = { ...fields, bPVCNativeSpace: 0, Quality: 0 };
+    accepted.document.dataPar = { ...pvc.document.dataPar, Quality: 0 };
     const navigated = {
       ...accepted,
       acceptedRevision: 3,
@@ -71,10 +72,22 @@ describe("native accepted parameter flow", () => {
     const { container, unmount } = renderWithMantine(<DataParEditor />);
     const w = within(container);
     fireEvent.click(w.getByRole("button", { name: "ASL Processing" }));
-    expect(w.getByTestId("field-bPVCNativeSpace")).toBeChecked();
+    expect(w.getByTestId("field-bPVCNativeSpace")).not.toBeChecked();
     expect(acceptedDataPar().bPVCNativeSpace).toBeUndefined();
-    fireEvent.click(w.getByTestId("field-bPVCNativeSpace"));
+    expect(invoke).not.toHaveBeenCalled();
+    fireEvent.click(w.getByTestId("datapar-confirm-switches"));
     await vi.waitFor(() => expect(acceptedDataPar().bPVCNativeSpace).toBe(0));
+    expect(invoke).toHaveBeenNthCalledWith(
+      1,
+      "accept_project_edit",
+      expect.objectContaining({
+        edit: expect.objectContaining({
+          kind: "parameters",
+          values: { ...PARAMETER_SWITCH_DEFAULTS, ...fields },
+        }),
+      }),
+    );
+    expect(w.queryByTestId("datapar-switch-confirmation")).not.toBeInTheDocument();
     fireEvent.click(w.getByRole("button", { name: "General Settings" }));
     fireEvent.click(w.getByTestId("field-Quality"));
     fireEvent.click(w.getByRole("option", { name: "Low quality (fast try-out)" }));
@@ -96,12 +109,12 @@ describe("native accepted parameter flow", () => {
       expect.objectContaining({
         edit: expect.objectContaining({
           kind: "parameters",
-          values: { ...fields, bPVCNativeSpace: 0, Quality: 0 },
+          values: { ...PARAMETER_SWITCH_DEFAULTS, ...fields, Quality: 0 },
         }),
       }),
     );
     expect(useProjectStore.getState().isDirty).toBe(false);
-    expect(acceptedDataPar()).toEqual({ ...fields, bPVCNativeSpace: 0, Quality: 0 });
+    expect(acceptedDataPar()).toEqual({ ...PARAMETER_SWITCH_DEFAULTS, ...fields, Quality: 0 });
     expect(assembleDataPar(acceptedDataPar()).x).toMatchObject({
       WMHsegmAlg: "LGA",
       modules: {

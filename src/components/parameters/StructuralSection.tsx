@@ -6,6 +6,7 @@ import type { DataParState } from "../../schemas/dataParSchema";
 import { DataParFieldLabel } from "./DataParFieldLabel";
 import { FIELD_METADATA } from "../../lib/dataParFieldMetadata";
 import { FlagToggle } from "./FlagToggle";
+import { PARAMETER_SWITCH_DEFAULTS } from "../../generated/bindings";
 
 interface StructuralSectionProps {
   dataPar: DataParState;
@@ -37,7 +38,7 @@ export function StructuralSection({ dataPar, onFieldChange }: StructuralSectionP
         <Group gap="xs" align="center" style={{ minHeight: "36px" }}>
           <Switch
             id="switch-bFixResolution"
-            checked={dataPar.bFixResolution ?? false}
+            checked={dataPar.bFixResolution ?? PARAMETER_SWITCH_DEFAULTS.bFixResolution}
             onChange={(e) => onFieldChange("bFixResolution", e.currentTarget.checked)}
             data-testid="field-bFixResolution"
           />

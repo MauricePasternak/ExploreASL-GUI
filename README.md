@@ -310,6 +310,8 @@ Use this if you already have a BIDS-compliant dataset (containing NIfTI images, 
 
 Configure the ExploreASL `dataPar.json` through structured forms covering Structural, ASL, Population, and Atlas settings. Basic fields are shown by default; advanced fields are revealed per section.
 
+Scalar switches are explicit On/Off processing overrides, not inherited ExploreASL defaults. New projects save these choices immediately: PVC starts Off; other switches keep their displayed initial choices. This GUI policy is not a claim of scientific suitability. Selectors, numeric inputs and arrays remain optional. Existing sparse projects open and save unchanged; review the proposed switches in Parameters and select **Confirm missing switch choices** before processing. Confirmation retains every existing explicit setting. Legacy VABY discovery and ATT inference flags retain checkout-specific limitations described in their help.
+
 ### Processing Pipeline Execution
 
 Select the subjects and pipeline modules (Structural / ASL / Population) you want to process. The GUI spawns MATLAB worker processes and tracks progress via ExploreASL's `.status` lock files, showing per-subject step completion in real time.

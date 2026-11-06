@@ -3,6 +3,7 @@ import type { DataParState } from "../schemas/dataParSchema";
 import type { AdvancedVisibility_Serialize as AdvancedVisibility } from "../generated/bindings";
 import { useProjectStore } from "./projectStore";
 import { captureProjectLease, isCurrentProjectLease } from "../lib/projectLifecycle";
+import { PARAMETER_SWITCH_DEFAULTS } from "../generated/bindings";
 
 export type DataParametersAdvancedVisibility = AdvancedVisibility;
 export const DEFAULT_ADVANCED_VISIBILITY: AdvancedVisibility = {
@@ -20,6 +21,7 @@ interface ParameterDrafts {
   drafts: Record<string, unknown>;
   setDataParField: (field: keyof DataParState, value: unknown) => Promise<void>;
   clearDataParField: (field: keyof DataParState) => Promise<void>;
+  confirmMissingSwitches: () => Promise<void>;
   setAdvancedVisibility: (values: Partial<AdvancedVisibility>) => Promise<void>;
   resetDataPar: () => void;
 }
@@ -75,6 +77,12 @@ export const useDataParStore = create<ParameterDrafts>((set, get) => ({
     }
   },
   clearDataParField: (field) => get().setDataParField(field, undefined),
+  confirmMissingSwitches: () =>
+    useProjectStore.getState().submitEdit((project) => ({
+      kind: "parameters",
+      values: { ...PARAMETER_SWITCH_DEFAULTS, ...project.dataPar },
+      visibility: project.uiState.datapar?.advancedVisibility ?? DEFAULT_ADVANCED_VISIBILITY,
+    })),
   setAdvancedVisibility: (visibility) =>
     useProjectStore.getState().submitEdit((project) => ({
       kind: "parameters",

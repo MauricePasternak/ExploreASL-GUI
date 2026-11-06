@@ -2,6 +2,8 @@
 // Data.par field metadata — labels, help, hints, and defaults
 // ---------------------------------------------------------------------------
 
+import { PARAMETER_SWITCH_DEFAULTS } from "../generated/bindings";
+
 export interface FieldMeta {
   label: string;
   description: string;
@@ -45,15 +47,15 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
   bRegisterM02ASL: {
     label: "Register M0 to ASL",
     description:
-      "Allow M0 registration to mean control, or T1w if mean control is unavailable. Explicit 0 skips registration; when unset, ExploreASL decides from M0 source and sequence. Registration is skipped for control-as-M0 and spiral sequences.",
-    default: 0,
+      "Allow M0 registration to mean control, or T1w if mean control is unavailable. Explicit Off skips registration rather than using data-dependent selection. Registration is skipped for control-as-M0 and spiral sequences.",
+    default: PARAMETER_SWITCH_DEFAULTS.bRegisterM02ASL,
     defaultHint: "Data-dependent when unset",
   },
   M0_conventionalProcessing: {
     label: "Legacy / Conventional M0 calibration",
     description:
       "Use conventional native-space M0 masking and minor smoothing instead of erosion, smoothing and extrapolation. ExploreASL disables this option for 3D acquisitions.",
-    default: 0,
+    default: PARAMETER_SWITCH_DEFAULTS.M0_conventionalProcessing,
     defaultHint: "false",
   },
   RepetitionTimePreparationM0: {
@@ -130,8 +132,8 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
   bUseExternalQuantification: {
     label: "Use external quantification",
     description:
-      "Request external quantification with BASIL, FABBER or VABY. When unset, ExploreASL can select external quantification from the data, including multi-PLD or multi-TE acquisitions.",
-    default: false,
+      "Request external quantification with BASIL, FABBER or VABY. Explicit Off overrides ExploreASL's data-dependent selection, including for multi-PLD or multi-TE acquisitions; review this choice for your data.",
+    default: PARAMETER_SWITCH_DEFAULTS.bUseExternalQuantification,
     defaultHint: "Data-dependent when unset",
   },
   ExternalQuantificationType: {
@@ -152,28 +154,28 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     label: "Mask external quantification",
     description:
       "Enable spatial brain masking during external quantification to limit calculations to brain tissue.",
-    default: true,
+    default: PARAMETER_SWITCH_DEFAULTS.bMaskingExternal,
     defaultHint: "true",
   },
   bSpatialBASIL: {
     label: "Spatial regularization (BASIL)",
     description:
       "Enable spatial regularization/smoothing in the BASIL model to improve signal coherence across neighboring voxels.",
-    default: false,
+    default: PARAMETER_SWITCH_DEFAULTS.bSpatialBASIL,
     defaultHint: "false",
   },
   bInferT1BASIL: {
     label: "Infer T1 in BASIL",
     description:
       "Infer variable T1 values in BASIL for multi-PLD data. This option is ignored for single-PLD data and disabled in low-quality mode.",
-    default: false,
+    default: PARAMETER_SWITCH_DEFAULTS.bInferT1BASIL,
     defaultHint: "false",
   },
   bInferATTBASIL: {
     label: "Infer ATT in BASIL (legacy, unsupported in audited checkout)",
     description:
       "Retained for saved-project compatibility. ExploreASL 2.0.0_BETA lists this legacy key but has no operative reader. It does not control ATT inference in that checkout and is not the distinct bInferArtBASIL arterial-component option.",
-    default: true,
+    default: PARAMETER_SWITCH_DEFAULTS.bInferATTBASIL,
     defaultHint: "No operative default in audited checkout",
   },
   ExchBASIL: {
@@ -200,9 +202,9 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
   bCleanUpExternal: {
     label: "Clean up external quantification",
     description:
-      "Delete external quantification intermediates after processing. ExploreASL defaults to true when unset; the GUI switch initially displays false without writing it.",
-    default: false,
-    defaultHint: "true when unset; GUI initially off",
+      "Delete external quantification intermediates after processing. The GUI's explicit initially Off choice overrides ExploreASL's true default when unset.",
+    default: PARAMETER_SWITCH_DEFAULTS.bCleanUpExternal,
+    defaultHint: "Explicit GUI choice",
   },
 
   // === generalSettings ===
@@ -217,7 +219,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     label: "Delete temporary files",
     description:
       "Automatically remove intermediate files and temporary data after processing is complete to save storage space.",
-    default: 1,
+    default: PARAMETER_SWITCH_DEFAULTS.DELETETEMP,
     defaultHint: "1",
   },
   SkipIfNoFlair: {
@@ -243,22 +245,22 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
   bLesionFilling: {
     label: "Lesion filling",
     description:
-      "Fill white-matter lesions with surrounding normal tissue signal before structural segmentation. ExploreASL defaults to true when unset. The GUI switch initially displays false without writing it.",
-    default: false,
-    defaultHint: "true when unset; GUI initially off",
+      "Fill white-matter lesions with surrounding normal tissue signal before structural segmentation. The GUI's explicit initially Off choice overrides ExploreASL's true default when unset.",
+    default: PARAMETER_SWITCH_DEFAULTS.bLesionFilling,
+    defaultHint: "Explicit GUI choice",
   },
   bAutoACPC: {
     label: "Auto AC-PC alignment",
     description:
       "Automatically orient and align anatomical images along the Anterior Commissure - Posterior Commissure (AC-PC) line.",
-    default: true,
+    default: PARAMETER_SWITCH_DEFAULTS.bAutoACPC,
     defaultHint: "true",
   },
   enableMetadataGroupingCorrection: {
     label: "Enable Metadata-grouping difference correction",
     description:
       "Generate or modify participants.tsv (at derivatives/ExploreASL/participants.tsv) and participants.json before starting the pipeline. Columns participant_id, session, and site (whitespace replaced with underscores, mapped from your metadata groups and subject row assignments) will be ensured.",
-    default: false,
+    default: PARAMETER_SWITCH_DEFAULTS.enableMetadataGroupingCorrection,
     defaultHint: "false",
   },
 
@@ -266,21 +268,21 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
   motionCorrection: {
     label: "Motion correction",
     description: "Enable head motion correction for the ASL timeseries using SPM realignment.",
-    default: 1,
+    default: PARAMETER_SWITCH_DEFAULTS.motionCorrection,
     defaultHint: "1",
   },
   bTopUp: {
     label: "FSL Topup distortion correction",
     description:
-      "Request FSL TopUp distortion correction. When unset, ExploreASL enables it if reversed phase-encoding scans exist, except when merging ASL sessions. The GUI switch initially displays false without writing it.",
-    default: false,
-    defaultHint: "Automatic when unset",
+      "Request FSL TopUp distortion correction. Explicit Off overrides automatic selection from reversed phase-encoding scans. ExploreASL skips TopUp when merging ASL sessions. Review the explicit choice for your acquisition.",
+    default: PARAMETER_SWITCH_DEFAULTS.bTopUp,
+    defaultHint: "Explicit GUI choice",
   },
   bPVCNativeSpace: {
     label: "Native-space partial volume correction (PVC)",
     description:
-      "Correct partial volume effects in native space. The GUI initially displays this switch on; unset values remain omitted, and ExploreASL defaults to off. Toggle explicitly to request a value.",
-    default: 0,
+      "Correct partial volume effects in native space. The GUI's explicit initial choice is Off. Existing missing choices display proposed Off until explicitly accepted; this is GUI policy, not a claim of scientific suitability.",
+    default: PARAMETER_SWITCH_DEFAULTS.bPVCNativeSpace,
     defaultHint: "0",
   },
   bPVCGaussianMM: {
@@ -300,7 +302,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     label: "Save 4D CBF",
     description:
       "Save individual cerebral blood flow (CBF) volumes sequentially as a 4D timeseries rather than just the averaged 3D map.",
-    default: false,
+    default: PARAMETER_SWITCH_DEFAULTS.SaveCBF4D,
     defaultHint: "false",
   },
   SpikeRemovalThreshold: {
@@ -342,7 +344,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     label: "Use MNI as dummy structural",
     description:
       "Use a standard MNI template brain as a dummy structural placeholder for subjects that lack a high-resolution T1/structural scan.",
-    default: 0,
+    default: PARAMETER_SWITCH_DEFAULTS.bUseMNIasDummyStructural,
     defaultHint: "0",
   },
   bHct2BloodT1: {
@@ -400,7 +402,7 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     label: "Include existing WMH voxels in ROI masks",
     description:
       "Include voxels from existing white-matter hyperintensity maps in ROI masks. When false, these voxels are excluded. This does not enable WMH detection or segmentation.",
-    default: false,
+    default: PARAMETER_SWITCH_DEFAULTS.bWMH,
     defaultHint: "false",
   },
   DataTypes: {
@@ -416,14 +418,14 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     label: "Multi-visit longitudinal registration",
     description:
       "Enable specialized longitudinal registration to register and track anatomical changes across multiple timepoints/scans per subject.",
-    default: 0,
+    default: PARAMETER_SWITCH_DEFAULTS.bRunLongReg,
     defaultHint: "0",
   },
   bRunDARTEL: {
     label: "DARTEL high-dimensional MNI normalization",
     description:
       "Enable DARTEL (SPM's high-dimensional diffeomorphic registration) to align brains more accurately to standard MNI space.",
-    default: 0,
+    default: PARAMETER_SWITCH_DEFAULTS.bRunDARTEL,
     defaultHint: "0",
   },
   WMHsegmAlg: {
@@ -437,20 +439,20 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
     label: "SPM12 segmentation",
     description:
       "Enable standard SPM12 tissue segmentation to partition structural T1 images into grey matter, white matter, and CSF.",
-    default: 0,
+    default: PARAMETER_SWITCH_DEFAULTS.bSegmentSPM12,
     defaultHint: "0",
   },
   bHammersCAT12: {
     label: "Hammers atlas via CAT12",
     description: "Use CAT12 to generate Hammers atlas parcellation.",
-    default: 0,
+    default: PARAMETER_SWITCH_DEFAULTS.bHammersCAT12,
     defaultHint: "0",
   },
   bFixResolution: {
     label: "Fix resolution",
     description:
       "Adjust T1w voxel dimensions coarser than about 1.5 mm for CAT12 segmentation. Finer voxel dimensions are retained; this is not resampling to 1 mm isotropic resolution.",
-    default: false,
+    default: PARAMETER_SWITCH_DEFAULTS.bFixResolution,
     defaultHint: "false",
   },
 
@@ -458,15 +460,15 @@ export const FIELD_METADATA: Record<string, FieldMeta> = {
   bAutomaticallyDetectFSL: {
     label: "Auto-detect FSL",
     description:
-      "Allow automatic FSL installation detection. When unset and no FSL directory is already available, ExploreASL defaults to automatic search. The GUI switch initially displays true without writing it.",
-    default: false,
+      "Allow automatic FSL installation detection. The GUI's explicit initial choice is On. ExploreASL searches when no FSL directory is already available.",
+    default: PARAMETER_SWITCH_DEFAULTS.bAutomaticallyDetectFSL,
     defaultHint: "Automatic search when needed",
   },
   bAutomaticallyDetectVABY: {
     label: "Auto-detect VABY (unsupported in audited checkout)",
     description:
-      "Retained for saved-project compatibility. ExploreASL 2.0.0_BETA reads this flag but does not implement automatic VABY discovery or use it to locate FABBER. Requested VABY quantification requires a configured x.external.VABYdir. The GUI switch initially displays true without writing it; this does not enable discovery in that checkout.",
-    default: false,
+      "Retained for saved-project compatibility. ExploreASL 2.0.0_BETA reads this flag but does not implement automatic VABY discovery or use it to locate FABBER. Requested VABY quantification requires a configured x.external.VABYdir. The GUI's explicit initially On choice does not enable discovery in that checkout.",
+    default: PARAMETER_SWITCH_DEFAULTS.bAutomaticallyDetectVABY,
     defaultHint: "Automatic discovery not implemented in audited checkout",
   },
 };

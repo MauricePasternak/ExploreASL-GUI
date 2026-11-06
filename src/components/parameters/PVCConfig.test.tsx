@@ -108,7 +108,7 @@ describe("PVCConfig", () => {
     expect(screen.getAllByText(/gaussian/i).length).toBeGreaterThan(0);
   });
 
-  it("treats undefined bPVCNativeSpace as true (default on)", () => {
+  it("treats undefined bPVCNativeSpace as proposed off without writing a value", () => {
     renderWithMantine(
       <PVCConfig
         bPVCNativeSpace={undefined}
@@ -121,8 +121,8 @@ describe("PVCConfig", () => {
       />,
     );
 
-    expect(screen.getByRole("switch")).toBeChecked();
-    expect(screen.getByTestId("field-bPVCGaussianMM")).toHaveValue("Flat");
-    expect(screen.getAllByText(/kernel size/i).length).toBeGreaterThan(0);
+    expect(screen.getByRole("switch")).not.toBeChecked();
+    expect(screen.queryByTestId("field-bPVCGaussianMM")).not.toBeInTheDocument();
+    expect(screen.queryByText(/kernel size/i)).not.toBeInTheDocument();
   });
 });

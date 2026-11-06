@@ -16,6 +16,7 @@ import { FIELD_METADATA } from "../../lib/dataParFieldMetadata";
 import { DataParFieldLabel } from "./DataParFieldLabel";
 import { AdvancedDivider } from "./AdvancedDivider";
 import { AtlasSelect } from "./AtlasSelect";
+import { PARAMETER_SWITCH_DEFAULTS } from "../../generated/bindings";
 
 interface AtlasesSectionProps {
   dataPar: DataParState;
@@ -147,7 +148,7 @@ export function AtlasesSection({
             <Group gap="xs" align="center" style={{ minHeight: "36px" }}>
               <Switch
                 id="switch-bWMH"
-                checked={dataPar.bWMH ?? false}
+                checked={dataPar.bWMH ?? PARAMETER_SWITCH_DEFAULTS.bWMH}
                 onChange={(e) => onFieldChange("bWMH", e.currentTarget.checked)}
                 data-testid="field-bWMH"
               />

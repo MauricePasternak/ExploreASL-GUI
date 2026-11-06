@@ -3,6 +3,7 @@ import { IconTerminal2 } from "@tabler/icons-react";
 
 import type { DataParState } from "../../schemas/dataParSchema";
 import { DataParFieldLabel } from "./DataParFieldLabel";
+import { PARAMETER_SWITCH_DEFAULTS } from "../../generated/bindings";
 
 interface EnvironmentSectionProps {
   dataPar: DataParState;
@@ -23,7 +24,9 @@ export function EnvironmentSection({ dataPar, onFieldChange }: EnvironmentSectio
         <Group gap="xs" align="center" style={{ minHeight: "36px" }}>
           <Switch
             id="switch-bAutomaticallyDetectFSL"
-            checked={dataPar.bAutomaticallyDetectFSL ?? true}
+            checked={
+              dataPar.bAutomaticallyDetectFSL ?? PARAMETER_SWITCH_DEFAULTS.bAutomaticallyDetectFSL
+            }
             onChange={(e) => onFieldChange("bAutomaticallyDetectFSL", e.currentTarget.checked)}
             data-testid="field-bAutomaticallyDetectFSL"
           />
@@ -36,7 +39,9 @@ export function EnvironmentSection({ dataPar, onFieldChange }: EnvironmentSectio
         <Group gap="xs" align="center" style={{ minHeight: "36px" }}>
           <Switch
             id="switch-bAutomaticallyDetectVABY"
-            checked={dataPar.bAutomaticallyDetectVABY ?? true}
+            checked={
+              dataPar.bAutomaticallyDetectVABY ?? PARAMETER_SWITCH_DEFAULTS.bAutomaticallyDetectVABY
+            }
             onChange={(e) => onFieldChange("bAutomaticallyDetectVABY", e.currentTarget.checked)}
             data-testid="field-bAutomaticallyDetectVABY"
           />

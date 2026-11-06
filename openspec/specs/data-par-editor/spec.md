@@ -4,6 +4,33 @@ Define editing and serialization of ExploreASL dataPar configuration.
 
 ## Requirements
 
+### Requirement: Authoritative scalar switches
+
+The 25 scalar Switch/FlagToggle controls SHALL display two states using native-owned defaults projected through existing bindings, with explicit stored values taking precedence. These choices SHALL be GUI policy, not claims about scientific appropriateness or universal engine defaults. Sparse projects SHALL require explicit acceptance of missing choices before fresh processing. Summaries SHALL describe displayed choices without a third default state.
+
+#### Scenario: Sparse project confirms choices
+
+- **WHEN** the user explicitly confirms missing switch choices in Parameters
+- **THEN** native acceptance SHALL store the missing proposed values while preserving all explicit and unrelated settings
+- **AND** Parameters SHALL prominently explain that missing displayed choices are proposed explicit overrides, with one explicit confirmation action submitting only missing defaults merged with accepted values through the existing Parameters edit
+- **AND** inspection, opening, ordinary save, unrelated edits and individual switch edits SHALL NOT fill other missing choices
+- **AND** complete configurations SHALL NOT require confirmation
+- **AND** assembly SHALL preserve explicit false/zero without injecting defaults
+
+#### Scenario: New project uses explicit choices
+
+- **WHEN** a new project reaches Parameters
+- **THEN** PVC SHALL display Off and all scoped switches SHALL have typed explicit values matching the native policy
+- **AND** new projects SHALL store numeric 0/1 for bRegisterM02ASL, M0_conventionalProcessing, DELETETEMP, motionCorrection, bPVCNativeSpace, bUseMNIasDummyStructural, bRunLongReg, bRunDARTEL, bSegmentSPM12 and bHammersCAT12; only motionCorrection SHALL initially be 1
+- **AND** boolean bAutomaticallyDetectFSL and bAutomaticallyDetectVABY SHALL initially be true; bUseExternalQuantification, bMaskingExternal, bSpatialBASIL, bInferT1BASIL, bInferATTBASIL, bCleanUpExternal, bLesionFilling, bAutoACPC, enableMetadataGroupingCorrection, bTopUp, SaveCBF4D, bWMH and bFixResolution SHALL initially be false
+- **AND** selectors including Flat/Gaussian, numeric/text fields, arrays, tuple checkboxes, advanced visibility and hidden SkipIfNo fields SHALL remain outside this policy
+
+#### Scenario: Confirmation fails or becomes stale
+
+- **WHEN** confirmation fails or a replacement project activates before its response
+- **THEN** shared error/unsaved behavior SHALL apply only to the originating lifecycle and unrelated drafts SHALL remain intact
+- **AND** confirmation SHALL preserve unrelated values, drafts and errors and follow shared pending, save, failure and lifecycle rules; a stale response SHALL NOT mutate a replacement project
+
 ### Requirement: DataPar parameter state schema
 
 The system SHALL represent supported flat DataPar settings through the shared current project contract with optional fields named exactly as ExploreASL requires. Known types, numeric flag representations, array sizes, and supported ranges SHALL validate before configuration acceptance. Unknown loose scientific extension keys SHALL survive `.easl` project load, accepted edits, save, and reopen; this persistence guarantee SHALL NOT imply inclusion in nested outbound processing JSON, whose assembly enumerates supported keys only. UI panels SHALL remain M0, Quantification, General Settings, ASL Processing, Atlases, Structural, and Environment. Form placeholders SHALL not inject processing defaults; ordinary editing SHALL not require a complete execution-ready configuration.
@@ -26,14 +53,14 @@ The system SHALL represent supported flat DataPar settings through the shared cu
 
 ### Requirement: Field metadata constant
 
-The system SHALL define `FIELD_METADATA` for field labels, help, hints and defaults. Parameter components SHALL own section placement, basic/advanced grouping, widget selection and conditional visibility without duplicating those descriptors in `FIELD_METADATA`. Descriptions SHALL match operative meanings and units in the audited ExploreASL checkout `6dafdba4cd2333eede4525d05f110b1cfa3f63c6`, identified by `VERSION_2.0.0_BETA`; this SHALL NOT imply support across all releases. Hints SHALL distinguish GUI display choices from fixed or data-dependent MATLAB defaults. Metadata defaults SHALL NOT populate unset processing fields.
+The system SHALL define `FIELD_METADATA` for field labels, help, hints and non-switch defaults. Scalar switch choices SHALL come only from native-owned defaults projected through the existing bindings generator. Parameter components SHALL own section placement, basic/advanced grouping, widget selection and conditional visibility without duplicating those descriptors in `FIELD_METADATA`. Descriptions SHALL match operative meanings and units in the audited ExploreASL checkout `6dafdba4cd2333eede4525d05f110b1cfa3f63c6`, identified by `VERSION_2.0.0_BETA`; this SHALL NOT imply support across all releases. Hints SHALL distinguish explicit GUI policy from fixed or data-dependent MATLAB defaults. Metadata hints SHALL NOT populate unset processing fields.
 
-FSL help SHALL describe the GUI's initially on display and MATLAB's default automatic search when no FSL directory is already available. Lesion-filling help SHALL distinguish the GUI's initially off display from MATLAB's true default when unset. VABY discovery help SHALL state that the audited checkout does not implement automatic discovery and requires configured `x.external.VABYdir` for requested VABY quantification; existing discovery flag values SHALL remain preserved.
+FSL help SHALL describe the explicit initially on choice and MATLAB's automatic search when no FSL directory is already available. Lesion-filling help SHALL distinguish the explicit initially off choice from MATLAB's true default when unset. VABY discovery help SHALL state that the audited checkout does not implement automatic discovery and requires configured `x.external.VABYdir` for requested VABY quantification; existing discovery flag values SHALL remain preserved. Legacy ATT inference SHALL retain its checkout-specific unsupported warning.
 
 #### Scenario: Toggle field metadata
 
 - **WHEN** `bTopUp` metadata is accessed
-- **THEN** help SHALL describe automatic data-dependent TopUp selection when unset and the GUI's initially off display
+- **THEN** help SHALL explain that the explicit initially off choice overrides automatic data-dependent TopUp selection
 
 ### Requirement: M0 field widget
 
@@ -109,7 +136,7 @@ The `x.S.Atlases` field SHALL use a multi-select grouped into free and non-comme
 
 ### Requirement: PVC conditional reveal
 
-The initially on PVC display SHALL not force an unset field into saved state. Unset `bPVCNativeSpace` SHALL remain absent, preserving ExploreASL's default. When displayed on, advanced controls SHALL reveal `bPVCGaussianMM` and the three-dimensional kernel. Flat kernel dimensions SHALL use voxels and `[5, 5, 1]`; Gaussian FWHM SHALL use mm and `[10, 10, 4]` when no explicit kernel exists. Explicit kernels SHALL survive shape changes. Current persisted PVC flags SHALL use numeric 0/1 only; legacy boolean normalization SHALL not occur during project reading.
+PVC SHALL initially be explicitly Off for new projects; missing values in existing sparse projects SHALL display proposed Off without mutation until explicit acceptance. When displayed on, advanced controls SHALL reveal the optional `bPVCGaussianMM` selector and three-dimensional kernel. Flat kernel dimensions SHALL use voxels and `[5, 5, 1]`; Gaussian FWHM SHALL use mm and `[10, 10, 4]` when no explicit kernel exists. Explicit kernels SHALL survive shape changes. Current persisted PVC flags SHALL use numeric 0/1 only; legacy boolean normalization SHALL not occur during project reading.
 
 #### Scenario: User enables PVC without Gaussian
 
@@ -147,7 +174,7 @@ M0, Quantification, General Settings, ASL Processing, and Atlases SHALL each con
 
 ### Requirement: Ghost placeholder defaults
 
-All processing fields SHALL remain optional. Empty inputs SHALL display a hint from `FIELD_METADATA.defaultHint` without writing its value. Hints SHALL qualify magnetic-field-dependent relaxation constants and other data-dependent choices instead of asserting universal runtime defaults. Clearing a field to undefined SHALL omit it from outbound JSON; an explicitly stored empty array SHALL remain defined and SHALL be emitted. In particular, clearing the `DataTypes` text input SHALL store `[]`, not undefined, and processing assembly SHALL preserve `x.S.DataTypes = []`.
+Persisted processing fields SHALL remain optional for sparse-project compatibility. Non-switch empty inputs SHALL display a hint from `FIELD_METADATA.defaultHint` without writing its value. Hints SHALL qualify magnetic-field-dependent relaxation constants and other data-dependent choices instead of asserting universal runtime defaults. Clearing a field to undefined SHALL omit it from outbound JSON; an explicitly stored empty array SHALL remain defined and SHALL be emitted. In particular, clearing the `DataTypes` text input SHALL store `[]`, not undefined, and processing assembly SHALL preserve `x.S.DataTypes = []`. Scalar switch acceptance SHALL follow Authoritative scalar switches; selectors, arrays, numeric fields and hidden SkipIfNo fields SHALL remain optional.
 
 #### Scenario: User sees default for T1blood
 
@@ -221,12 +248,12 @@ The parameter route SHALL retain its existing accordion panels and previously ac
 
 ### Requirement: (?) Tooltip pattern for field labels
 
-Each processing field SHALL display an information icon with metadata help in a multiline tooltip. Help SHALL distinguish WMH ROI inclusion from segmentation, numeric M0 scalar calibration from an image, relative t-statistic improvement from a Z-score, and absolute motion threshold in mm from signal intensity. Providing absolute threshold 0 SHALL NOT be described as disabling fixed-threshold removal. Registration contrast choices SHALL describe 0 as control-to-T1w, 1 as CBF/PWI-to-pseudoCBF, 2 as automatic combined registration and 3 as combined registration with forced CBF attempts.
+Each rendered processing field SHALL display an information icon with metadata help in a multiline tooltip. Help SHALL distinguish WMH ROI inclusion from segmentation, numeric M0 scalar calibration from an image, relative t-statistic improvement from a Z-score, and absolute motion threshold in mm from signal intensity. Providing absolute threshold 0 SHALL NOT be described as disabling fixed-threshold removal. Registration contrast choices SHALL describe 0 as control-to-T1w, 1 as CBF/PWI-to-pseudoCBF, 2 as automatic combined registration and 3 as combined registration with forced CBF attempts.
 
 #### Scenario: User hovers over bTopUp label
 
 - **WHEN** user hovers over the TopUp information icon
-- **THEN** help SHALL describe automatic selection when unset, including reversed phase-encoding scans and session-merging exceptions
+- **THEN** help SHALL describe explicit Off overriding automatic selection, including reversed phase-encoding scans and session-merging exceptions
 
 #### Scenario: User inspects WMH ROI help
 

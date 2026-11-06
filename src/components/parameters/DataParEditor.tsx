@@ -1,4 +1,4 @@
-import { Accordion, Alert, Stack, Switch, Text } from "@mantine/core";
+import { Accordion, Alert, Button, Stack, Switch, Text } from "@mantine/core";
 import { IconAdjustments, IconAlertTriangle } from "@tabler/icons-react";
 import { useCallback } from "react";
 import { M0_OPTIONS } from "../../lib/dataParFieldMetadata";
@@ -15,15 +15,21 @@ import { M0Section } from "./M0Section";
 import { QuantificationSection } from "./QuantificationSection";
 import { StructuralSection } from "./StructuralSection";
 import "./DataParEditor.css";
+import { PARAMETER_SWITCH_DEFAULTS } from "../../generated/bindings";
+import { hasMissingParameterSwitches } from "../../lib/dataParDefaults";
 
 function flagState(value: boolean | 0 | 1 | undefined) {
-  return value === undefined ? "unset" : value ? "on" : "off";
+  return value ? "on" : "off";
 }
 
 export default function DataParEditor() {
   const accepted = useProjectStore((state) => state.project?.dataPar);
   const drafts = useDataParStore((state) => state.drafts);
-  const dataPar = { ...accepted, ...drafts } as DataParState;
+  const dataPar = { ...PARAMETER_SWITCH_DEFAULTS, ...accepted, ...drafts } as DataParState;
+  const missingSwitches = hasMissingParameterSwitches(accepted);
+  const pendingEdits = useProjectStore((state) => state.pendingEdits);
+  const saveError = useProjectStore((state) => state.saveError);
+  const confirmMissingSwitches = useDataParStore((state) => state.confirmMissingSwitches);
   const advancedVisibility = useProjectStore(
     (state) => state.project?.uiState.datapar?.advancedVisibility ?? DEFAULT_ADVANCED_VISIBILITY,
   );
@@ -58,7 +64,7 @@ export default function DataParEditor() {
       <HeaderCard
         icon={IconAdjustments}
         title="ExploreASL Processing Parameters"
-        subtitle="Configure study-level processing. Unset fields and displayed hints are not saved overrides."
+        subtitle="Switches are explicit processing overrides. Other unset fields and displayed hints remain optional."
         color="grape"
         dataTestId="data-par-editor-header"
         rightSection={
@@ -70,6 +76,34 @@ export default function DataParEditor() {
           />
         }
       />
+
+      {missingSwitches && (
+        <Alert
+          color="yellow"
+          title="Review proposed switch choices"
+          data-testid="datapar-switch-confirmation"
+        >
+          <Text size="sm" data-testid="datapar-switch-confirmation-help">
+            This project has missing switch choices. Displayed On/Off choices are proposed explicit
+            overrides, not inherited engine defaults. Review them, then confirm before processing.
+            Existing explicit settings are preserved.
+          </Text>
+          {saveError && (
+            <Text c="red" data-testid="datapar-switch-confirmation-error">
+              {saveError}
+            </Text>
+          )}
+          <Button
+            mt="sm"
+            loading={pendingEdits > 0}
+            disabled={pendingEdits > 0}
+            onClick={() => void confirmMissingSwitches().catch(() => undefined)}
+            data-testid="datapar-confirm-switches"
+          >
+            Confirm missing switch choices
+          </Button>
+        </Alert>
+      )}
 
       {Object.keys(draftErrors).some((field) => field.startsWith("dataPar.")) && (
         <Alert color="red" data-testid="datapar-draft-error">

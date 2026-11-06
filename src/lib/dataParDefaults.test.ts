@@ -11,12 +11,12 @@ describe("getDefaultDataPar", () => {
     expect(defaults.T1blood).toBe(1650);
     expect(defaults.nCompartments).toBe(1);
     expect(defaults.Quality).toBe(1);
-    expect(defaults.DELETETEMP).toBe(1);
+    expect(defaults.DELETETEMP).toBe(0);
     expect(defaults.bTopUp).toBe(false);
-    expect(defaults.bInferATTBASIL).toBe(true);
+    expect(defaults.bInferATTBASIL).toBe(false);
     expect(defaults.bCleanUpExternal).toBe(false);
-    expect(defaults.bAutomaticallyDetectFSL).toBe(false);
-    expect(defaults.bAutomaticallyDetectVABY).toBe(false);
+    expect(defaults.bAutomaticallyDetectFSL).toBe(true);
+    expect(defaults.bAutomaticallyDetectVABY).toBe(true);
   });
 
   it("includes tuple defaults", () => {

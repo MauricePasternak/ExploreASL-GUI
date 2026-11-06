@@ -3,6 +3,7 @@ import { Switch, Group, Stack, Select } from "@mantine/core";
 import { DataParFieldLabel } from "./DataParFieldLabel";
 import { NumberTupleInput } from "./NumberTupleInput";
 import { fromFlag, toFlag } from "../../lib/dataParFlags";
+import { PARAMETER_SWITCH_DEFAULTS } from "../../generated/bindings";
 
 interface PVCConfigProps {
   bPVCNativeSpace: 0 | 1 | undefined;
@@ -23,7 +24,7 @@ export function PVCConfig({
   onKernelChange,
   showAdvanced,
 }: PVCConfigProps) {
-  const pvcEnabled = fromFlag(bPVCNativeSpace, true);
+  const pvcEnabled = fromFlag(bPVCNativeSpace ?? PARAMETER_SWITCH_DEFAULTS.bPVCNativeSpace);
   const gaussianEnabled = fromFlag(bPVCGaussianMM);
   const kernel = PVCNativeSpaceKernel ?? (gaussianEnabled ? [10, 10, 4] : [5, 5, 1]);
 

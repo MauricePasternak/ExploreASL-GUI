@@ -2,23 +2,17 @@ import { Group, Switch } from "@mantine/core";
 
 import { fromFlag, toFlag } from "../../lib/dataParFlags";
 import { DataParFieldLabel } from "./DataParFieldLabel";
+import { PARAMETER_SWITCH_DEFAULTS } from "../../generated/bindings";
 
 export interface FlagToggleProps {
-  fieldKey: string;
+  fieldKey: keyof typeof PARAMETER_SWITCH_DEFAULTS;
   value: 0 | 1 | boolean | undefined;
   onChange: (v: 0 | 1) => void;
-  defaultValue?: boolean;
   testId?: string;
 }
 
-export function FlagToggle({
-  fieldKey,
-  value,
-  onChange,
-  defaultValue = false,
-  testId,
-}: FlagToggleProps) {
-  const checked = fromFlag(value, defaultValue);
+export function FlagToggle({ fieldKey, value, onChange, testId }: FlagToggleProps) {
+  const checked = fromFlag(value ?? PARAMETER_SWITCH_DEFAULTS[fieldKey]);
   const inputId = `switch-${fieldKey}`;
 
   return (

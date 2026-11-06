@@ -88,7 +88,9 @@ describe("flattenRunDataPar", () => {
 
 describe("generateMethodsParagraph", () => {
   it("describes explicit supplied settings with sorted, unique references", () => {
-    const result = generateMethodsParagraph(fullState({ bLesionFilling: true, WMHsegmAlg: "LGA" }));
+    const result = generateMethodsParagraph(
+      fullState({ bAutoACPC: true, bLesionFilling: true, WMHsegmAlg: "LGA" }),
+    );
 
     expect(result.paragraphs).toHaveLength(5);
     expect(result.disclaimer).toBe(

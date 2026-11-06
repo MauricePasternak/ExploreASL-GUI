@@ -8,6 +8,7 @@ import type { DataParState } from "../../schemas/dataParSchema";
 import { AdvancedDivider } from "./AdvancedDivider";
 import { DataParFieldLabel } from "./DataParFieldLabel";
 import { NumberTupleInput } from "./NumberTupleInput";
+import { PARAMETER_SWITCH_DEFAULTS } from "../../generated/bindings";
 
 interface QuantificationSectionProps {
   dataPar: DataParState;
@@ -41,7 +42,8 @@ export function QuantificationSection({
   showAdvanced,
   onToggleAdvanced,
 }: QuantificationSectionProps) {
-  const externalEnabled = dataPar.bUseExternalQuantification === true;
+  const externalEnabled =
+    dataPar.bUseExternalQuantification ?? PARAMETER_SWITCH_DEFAULTS.bUseExternalQuantification;
 
   return (
     <Stack gap="md">
@@ -197,7 +199,7 @@ export function QuantificationSection({
                     <Group key={key} gap="xs" align="center" style={{ minHeight: "32px" }}>
                       <Switch
                         id={`switch-${key}`}
-                        checked={dataPar[key] ?? false}
+                        checked={dataPar[key] ?? PARAMETER_SWITCH_DEFAULTS[key]}
                         onChange={(e) => onFieldChange(key, e.currentTarget.checked)}
                         data-testid={`field-${key}`}
                       />

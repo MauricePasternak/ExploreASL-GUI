@@ -10,6 +10,7 @@ import { AdvancedDivider } from "./AdvancedDivider";
 import { ApplyQuantificationGroup } from "./ApplyQuantificationGroup";
 import { FlagToggle } from "./FlagToggle";
 import { PVCConfig } from "./PVCConfig";
+import { PARAMETER_SWITCH_DEFAULTS } from "../../generated/bindings";
 
 interface ASLProcessingSectionProps {
   dataPar: DataParState;
@@ -38,14 +39,13 @@ export function ASLProcessingSection({
           <FlagToggle
             fieldKey="motionCorrection"
             value={dataPar.motionCorrection}
-            defaultValue={true}
             onChange={(v) => onFieldChange("motionCorrection", v)}
           />
 
           <Group gap="xs" align="center" style={{ minHeight: "32px" }}>
             <Switch
               id="switch-bTopUp"
-              checked={dataPar.bTopUp ?? false}
+              checked={dataPar.bTopUp ?? PARAMETER_SWITCH_DEFAULTS.bTopUp}
               onChange={(e) => onFieldChange("bTopUp", e.currentTarget.checked)}
               data-testid="field-bTopUp"
             />
@@ -55,7 +55,7 @@ export function ASLProcessingSection({
           <Group gap="xs" align="center" style={{ minHeight: "32px" }}>
             <Switch
               id="switch-SaveCBF4D"
-              checked={dataPar.SaveCBF4D ?? false}
+              checked={dataPar.SaveCBF4D ?? PARAMETER_SWITCH_DEFAULTS.SaveCBF4D}
               onChange={(e) => onFieldChange("SaveCBF4D", e.currentTarget.checked)}
               data-testid="field-SaveCBF4D"
             />

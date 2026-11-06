@@ -7,6 +7,7 @@ import type { DataParState } from "../../schemas/dataParSchema";
 import { AdvancedDivider } from "./AdvancedDivider";
 import { DataParFieldLabel } from "./DataParFieldLabel";
 import { FlagToggle } from "./FlagToggle";
+import { PARAMETER_SWITCH_DEFAULTS } from "../../generated/bindings";
 
 interface GeneralSettingsSectionProps {
   dataPar: DataParState;
@@ -15,7 +16,7 @@ interface GeneralSettingsSectionProps {
   onToggleAdvanced: () => void;
 }
 
-const ADVANCED_FLAG_FIELDS = ["DELETETEMP", "SkipIfNoASL", "SkipIfNoFlair", "SkipIfNoM0"] as const;
+const ADVANCED_FLAG_FIELDS = ["DELETETEMP"] as const;
 
 const ADVANCED_BOOLEAN_FIELDS = ["bLesionFilling", "bAutoACPC"] as const;
 
@@ -52,7 +53,10 @@ export function GeneralSettingsSection({
             <Group gap="xs" align="center" style={{ minHeight: "36px" }}>
               <Switch
                 id="switch-enableMetadataGroupingCorrection"
-                checked={dataPar.enableMetadataGroupingCorrection ?? false}
+                checked={
+                  dataPar.enableMetadataGroupingCorrection ??
+                  PARAMETER_SWITCH_DEFAULTS.enableMetadataGroupingCorrection
+                }
                 onChange={(e) =>
                   onFieldChange("enableMetadataGroupingCorrection", e.currentTarget.checked)
                 }
@@ -110,7 +114,7 @@ export function GeneralSettingsSection({
               <Group key={key} gap="xs" align="center" style={{ minHeight: "32px" }}>
                 <Switch
                   id={`switch-${key}`}
-                  checked={dataPar[key] ?? false}
+                  checked={dataPar[key] ?? PARAMETER_SWITCH_DEFAULTS[key]}
                   onChange={(e) => onFieldChange(key, e.currentTarget.checked)}
                   data-testid={`field-${key}`}
                 />

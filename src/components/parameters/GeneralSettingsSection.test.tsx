@@ -33,29 +33,39 @@ function GeneralSettingsSectionWrapper({
 }
 
 describe("GeneralSettingsSection", () => {
-  it("renders basic fields and shows advanced fields when toggled on", () => {
+  it.each<DataParState>([
+    emptyState,
+    { SkipIfNoFlair: 0, SkipIfNoASL: 0, SkipIfNoM0: 0 },
+    { SkipIfNoFlair: 1, SkipIfNoASL: 1, SkipIfNoM0: 1 },
+  ])("hides skip controls with advanced settings open for %j", (dataPar) => {
+    const onFieldChange = vi.fn();
     renderWithMantine(
-      <GeneralSettingsSectionWrapper dataPar={emptyState} onFieldChange={() => {}} />,
+      <GeneralSettingsSectionWrapper dataPar={dataPar} onFieldChange={onFieldChange} />,
     );
     expect(screen.getAllByText(/processing quality/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/show advanced/i).length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole("switch", { name: /show advanced/i }));
     expect(screen.getAllByText(/delete temporary/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/skip if no flair/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/skip if no asl/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/skip if no m0/i).length).toBeGreaterThan(0);
+    expect(screen.queryByTestId("field-SkipIfNoFlair")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("field-SkipIfNoASL")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("field-SkipIfNoM0")).not.toBeInTheDocument();
     expect(screen.getAllByText(/lesion filling/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/auto ac-pc/i).length).toBeGreaterThan(0);
+    expect(onFieldChange).not.toHaveBeenCalled();
   });
 
-  it("calls onFieldChange when DELETETEMP toggled", () => {
+  it.each([
+    ["DELETETEMP", /delete temporary/i, 1],
+    ["bLesionFilling", /lesion filling/i, true],
+    ["bAutoACPC", /auto ac-pc/i, true],
+  ] as const)("calls onFieldChange when %s toggled", (field, name, value) => {
     const onFieldChange = vi.fn();
     renderWithMantine(
       <GeneralSettingsSectionWrapper dataPar={emptyState} onFieldChange={onFieldChange} />,
     );
     fireEvent.click(screen.getByRole("switch", { name: /show advanced/i }));
-    fireEvent.click(screen.getByRole("switch", { name: /delete temporary/i }));
-    expect(onFieldChange).toHaveBeenCalledWith("DELETETEMP", expect.any(Number));
+    fireEvent.click(screen.getByRole("switch", { name }));
+    expect(onFieldChange).toHaveBeenCalledExactlyOnceWith(field, value);
   });
 
   it("calls onToggleAdvanced when Show advanced is toggled", () => {
