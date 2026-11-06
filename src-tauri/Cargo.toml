@@ -4,6 +4,16 @@ version = "0.1.2"
 description = "A Tauri App"
 authors = ["you"]
 edition = "2024"
+default-run = "exploreasl_gui"
+
+[features]
+bindings = []
+
+# Keep developer tooling out of normal app builds and bundles.
+[[bin]]
+name = "export_bindings"
+path = "src/bin/export_bindings.rs"
+required-features = ["bindings"]
 
 [workspace]
 members = ["crates/execution-runtime"]

@@ -59,7 +59,7 @@ fn canonical_project_bytes_survive_create_open_save_and_reopen() {
     "nCompartments": 1, "Lambda": 0.9, "T2art": 50, "T1blood": 1650, "T1GM": 1300, "T1WM": 1100, "T2GM": 80, "T2WM": 45, "T2tissueMultiTE": 0.04,
     "bUseExternalQuantification": true, "ExternalQuantificationType": "BASIL", "ExternalQuantificationSmoothGaussianMM": [5.5,5,1.5], "bMaskingExternal": false, "bSpatialBASIL": true, "bInferT1BASIL": false, "bInferATTBASIL": true, "ExchBASIL": "mix", "DispBASIL": "gamma", "ATTSDBASIL": 1.5, "bCleanUpExternal": false,
     "Quality": null, "DELETETEMP": 0, "SkipIfNoFlair": 1, "SkipIfNoASL": 0, "SkipIfNoM0": 1, "enableMetadataGroupingCorrection": true,
-    "motionCorrection": 1, "bTopUp": false, "bPVCNativeSpace": 1, "bPVCGaussianMM": 1, "PVCNativeSpaceKernel": [5,5,1], "SaveCBF4D": true, "SpikeRemovalThreshold": 3, "SpikeRemovalAbsoluteThreshold": 100, "bRegistrationContrast": 1, "bAffineRegistration": 2, "bDCTRegistration": 0, "bUseMNIasDummyStructural": 0, "bHct2BloodT1": 1, "ApplyQuantification": [1,0,1,0,1,0],
+    "bTopUp": false, "bPVCNativeSpace": 1, "bPVCGaussianMM": 1, "PVCNativeSpaceKernel": [5,5,1], "SaveCBF4D": true, "SpikeRemovalThreshold": 3, "SpikeRemovalAbsoluteThreshold": 100, "bRegistrationContrast": 1, "bAffineRegistration": 2, "bDCTRegistration": 0, "bUseMNIasDummyStructural": 0, "bHct2BloodT1": 1, "ApplyQuantification": [1,0,1,0,1,0],
     "Atlases": ["MNI_Structural","Hammers"], "TissueMasking": ["GM","WM"], "TissueThreshold": [0,1], "bMasking": [1,0,1,0], "MinimalROIVolume": 10, "bWMH": true, "DataTypes": ["CBF","M0map"],
     "bRunLongReg": 1, "bRunDARTEL": 0, "WMHsegmAlg": "LPA", "bSegmentSPM12": 1, "bHammersCAT12": 0, "bFixResolution": true, "bLesionFilling": false, "bAutoACPC": true,
     "bAutomaticallyDetectFSL": true, "bAutomaticallyDetectVABY": false, "vendor": {"nested": [true,null,3]}
@@ -149,6 +149,7 @@ fn canonical_project_bytes_survive_create_open_save_and_reopen() {
     assert_eq!(reopened.project_meta.name, "Original");
     assert_eq!(reopened.ui_state.navbar_collapsed, Some(false));
     assert_eq!(reopened.data_par, opened.document.data_par);
+    assert!(reopened.data_par.motionCorrection.is_none());
     assert_eq!(reopened.ui_state.import, opened.document.ui_state.import);
     assert_eq!(
         reopened.ui_state.manifest,

@@ -230,6 +230,41 @@ pub struct ImportSnapshot {
 #[specta(type = super::bindings::NumericFlagWire)]
 pub struct NumericFlag(u8);
 
+impl DataPar {
+    /// Explicit GUI switch policy, not ExploreASL's scientific defaults.
+    /// Keep Default sparse for existing schema-2 documents.
+    pub fn switch_defaults() -> Self {
+        Self {
+            bRegisterM02ASL: Some(NumericFlag(0)),
+            M0_conventionalProcessing: Some(NumericFlag(0)),
+            DELETETEMP: Some(NumericFlag(0)),
+            motionCorrection: Some(NumericFlag(1)),
+            bPVCNativeSpace: Some(NumericFlag(0)),
+            bUseMNIasDummyStructural: Some(NumericFlag(0)),
+            bRunLongReg: Some(NumericFlag(0)),
+            bRunDARTEL: Some(NumericFlag(0)),
+            bSegmentSPM12: Some(NumericFlag(0)),
+            bHammersCAT12: Some(NumericFlag(0)),
+            bUseExternalQuantification: Some(false),
+            bMaskingExternal: Some(false),
+            bSpatialBASIL: Some(false),
+            bInferT1BASIL: Some(false),
+            bInferATTBASIL: Some(false),
+            bCleanUpExternal: Some(false),
+            bLesionFilling: Some(false),
+            bAutoACPC: Some(false),
+            enableMetadataGroupingCorrection: Some(false),
+            bTopUp: Some(false),
+            SaveCBF4D: Some(false),
+            bWMH: Some(false),
+            bFixResolution: Some(false),
+            bAutomaticallyDetectFSL: Some(true),
+            bAutomaticallyDetectVABY: Some(true),
+            ..Self::default()
+        }
+    }
+}
+
 impl TryFrom<u8> for NumericFlag {
     type Error = &'static str;
 

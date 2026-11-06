@@ -65,7 +65,7 @@ pub(crate) fn defaults(
             source_data_path: (source == DataSource::Bids).then(|| ".".into()),
             ..Default::default()
         },
-        data_par: DataPar::default(),
+        data_par: DataPar::switch_defaults(),
         ui_state: UiState {
             navbar_collapsed: Some(true),
             import: Some(ImportUiState {

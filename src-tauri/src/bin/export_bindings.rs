@@ -30,7 +30,13 @@ fn export(directory: &Path) -> Result<()> {
         "const _assertTypedErrorFollowsContract: <T, E>(result: Promise<T>) => Promise<any> = typedError;",
         "const _assertTypedErrorFollowsContract: <T, _E>(result: Promise<T>) => Promise<any> = typedError;\nvoid _assertTypedErrorFollowsContract;",
     );
-    fs::write(&path, generated)?;
+    let switches = serde_json::to_string_pretty(
+        &exploreasl_gui_lib::project::model::DataPar::switch_defaults(),
+    )?;
+    fs::write(
+        &path,
+        format!("{generated}\nexport const PARAMETER_SWITCH_DEFAULTS = {switches} as const;\n"),
+    )?;
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
     let status = Command::new("pnpm")
         .current_dir(root)

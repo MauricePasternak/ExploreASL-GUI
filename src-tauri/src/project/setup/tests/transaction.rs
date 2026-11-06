@@ -249,7 +249,14 @@ fn transaction_installs_project_last_and_replays_result() {
         document.mapping_state.source_data_path.as_deref(),
         Some(".")
     );
-    assert_eq!(document.data_par, crate::project::model::DataPar::default());
+    let switches = serde_json::to_value(&document.data_par).unwrap();
+    assert_eq!(switches.as_object().unwrap().len(), 25);
+    assert_eq!(switches["bPVCNativeSpace"], 0);
+    assert_eq!(switches["motionCorrection"], 1);
+    assert_eq!(switches["bTopUp"], false);
+    assert_eq!(switches["bAutomaticallyDetectFSL"], true);
+    assert!(document.data_par.bPVCGaussianMM.is_none());
+    assert!(document.data_par.M0.is_none());
     assert!(document.ui_state.processing.is_none());
     assert_eq!(document.ui_state.manifest.reviewers.len(), 1);
     assert_eq!(document.ui_state.manifest.reviewers[0].label, "Reviewer 1");

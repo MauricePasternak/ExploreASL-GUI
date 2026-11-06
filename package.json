@@ -30,8 +30,8 @@
     "format:check": "pnpm format:check:frontend && pnpm format:check:backend",
     "format:check:frontend": "prettier --check .",
     "format:check:backend": "cargo fmt --manifest-path src-tauri/Cargo.toml --check",
-    "bindings:generate": "cargo run --manifest-path src-tauri/Cargo.toml --example export_bindings",
-    "bindings:check": "cargo run --manifest-path src-tauri/Cargo.toml --example export_bindings -- --check",
+    "bindings:generate": "cargo run --manifest-path src-tauri/Cargo.toml --features bindings --bin export_bindings",
+    "bindings:check": "cargo run --manifest-path src-tauri/Cargo.toml --features bindings --bin export_bindings -- --check",
     "typecheck": "pnpm bindings:check && tsc --noEmit"
   },
   "dependencies": {

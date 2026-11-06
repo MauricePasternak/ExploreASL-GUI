@@ -2320,3 +2320,31 @@ async function typedError<T, E>(
 
 const _assertTypedErrorFollowsContract: <T, _E>(result: Promise<T>) => Promise<any> = typedError;
 void _assertTypedErrorFollowsContract;
+
+export const PARAMETER_SWITCH_DEFAULTS = {
+  bRegisterM02ASL: 0,
+  M0_conventionalProcessing: 0,
+  bUseExternalQuantification: false,
+  bMaskingExternal: false,
+  bSpatialBASIL: false,
+  bInferT1BASIL: false,
+  bInferATTBASIL: false,
+  bCleanUpExternal: false,
+  DELETETEMP: 0,
+  enableMetadataGroupingCorrection: false,
+  motionCorrection: 1,
+  bTopUp: false,
+  bPVCNativeSpace: 0,
+  SaveCBF4D: false,
+  bUseMNIasDummyStructural: 0,
+  bWMH: false,
+  bRunLongReg: 0,
+  bRunDARTEL: 0,
+  bSegmentSPM12: 0,
+  bHammersCAT12: 0,
+  bFixResolution: false,
+  bLesionFilling: false,
+  bAutoACPC: false,
+  bAutomaticallyDetectFSL: true,
+  bAutomaticallyDetectVABY: true,
+} as const;
