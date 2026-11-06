@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { projectView } from "../schemas/project";
 import { projectFixture } from "../test/projectFixtures";
+import { PARAMETER_SWITCH_DEFAULTS } from "../generated/bindings";
 import { cleanup, renderHook } from "@testing-library/react";
 import { useProcessingSync } from "../hooks/useProcessingSync";
 import { DEFAULT_SETTINGS } from "../schemas/globalSettings";
@@ -58,6 +59,7 @@ describe("processing store", () => {
     resetProjectLifecycleForTests();
     await useProcessingStore.getState().resetProcessing();
     useProjectStore.setState({ project: projectView(projectFixture()) });
+    useProjectStore.getState().project!.dataPar = { ...PARAMETER_SWITCH_DEFAULTS };
     activateProjectLease("project-1", "/project");
     useGlobalStore.setState({
       settings: { ...DEFAULT_SETTINGS, executionProfiles: [processingProfile] },
@@ -126,6 +128,14 @@ describe("processing store", () => {
     expect(console.warn).toHaveBeenCalledTimes(2);
   });
   it("reserves before launch with pure request and attaches listeners", async () => {
+    useProjectStore.getState().project!.uiState.processing = {
+      config: { ...config, subjects: [] },
+    };
+    useProjectStore.getState().project!.dataPar = {};
+    await expect(useProcessingStore.getState().startProcessing()).rejects.toThrow(
+      /confirm.*Parameters/,
+    );
+    expect(reserveProcessingRun).not.toHaveBeenCalled();
     const project = useProjectStore.getState().project!;
     useProjectStore.setState({
       project: {
@@ -143,6 +153,7 @@ describe("processing store", () => {
       project: {
         ...useProjectStore.getState().project!,
         dataPar: {
+          ...PARAMETER_SWITCH_DEFAULTS,
           enableMetadataGroupingCorrection: true,
           WMHsegmAlg: "LGA",
           bRunLongReg: 1,
@@ -205,7 +216,7 @@ describe("processing store", () => {
     const request = vi.mocked(reserveProcessingRun).mock.calls[0]![0];
     expect(request.dataPar.x).toMatchObject({
       WMHsegmAlg: "LGA",
-      modules: { bRunLongReg: 1 },
+      modules: { bRunLongReg: 1, asl: { bTopUp: false, bPVCNativeSpace: 0 } },
       Q: { nCompartments: 2 },
     });
     expect(request.dataPar.x).not.toHaveProperty("modules.asl.SpikeRemovalAbsoluteThreshold");

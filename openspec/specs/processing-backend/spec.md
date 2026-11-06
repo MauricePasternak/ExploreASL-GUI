@@ -200,6 +200,8 @@ Native reservation SHALL validate the active project and an immutable request co
 
 For Structural and ASL, native reservation SHALL interpret an empty `selectedSubjectSessions` list as all discovered SubjectSessions, not as empty work. A nonempty list SHALL restrict inventory to those entries and SHALL reject entries absent from native discovery. Expected targets SHALL omit unavailable modules per SubjectSession; Population SHALL contribute one dataset-level target independently of subject selection. This native contract SHALL remain distinct from the renderer's empty-selection and missing-ASL hard blocks. Preparation SHALL rederive the effective targets and reject changed target inventory rather than silently alter the reserved set.
 
+After existing exact-request replay lookup and before fresh reservation, processing filesystem mutation or worker launch, native admission SHALL require all 25 scalar switch choices in accepted configuration and correctly typed submitted values equal to those choices at their operative destinations, including `participants.correction` for metadata grouping correction. Missing accepted choices SHALL direct the user to review and confirm Parameters. Missing, wrong-typed or mismatching submitted values SHALL reject without backfilling. Historical sparse records, exact retries, recovery, digests and acknowledgements SHALL retain their existing compatibility; fresh completeness enforcement SHALL NOT be added to shared record validation.
+
 #### Scenario: Native empty selection includes all discovered eligible work
 
 - **WHEN** `reserve_processing_run` receives an otherwise valid Structural or ASL request with an empty selected-subject list and eligible native inventory

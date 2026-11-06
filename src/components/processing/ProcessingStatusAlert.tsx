@@ -11,6 +11,10 @@ import { useGlobalStore } from "../../stores/globalStore";
 import { useProcessingStore } from "../../stores/processingStore";
 import { useProjectStore } from "../../stores/projectStore";
 import { useProcessingEnvironment } from "../../hooks/useProcessingEnvironment";
+import {
+  hasMissingParameterSwitches,
+  SWITCH_CONFIRMATION_GUIDANCE,
+} from "../../lib/dataParDefaults";
 
 export interface PreflightResult {
   errors: string[];
@@ -26,6 +30,7 @@ interface ProcessingStatusAlertProps {
 
 export default function ProcessingStatusAlert({ onResult }: ProcessingStatusAlertProps) {
   const config = useProjectStore((s) => s.project?.uiState.processing?.config);
+  const dataPar = useProjectStore((s) => s.project?.dataPar);
   const executionProfiles = useGlobalStore((s) => s.settings.executionProfiles);
   const profileValidationState = useGlobalStore((s) => s.profileValidationState);
   const hasValidProfile = useGlobalStore((s) => s.hasValidProfile);
@@ -57,6 +62,7 @@ export default function ProcessingStatusAlert({ onResult }: ProcessingStatusAler
   const result = useMemo((): PreflightResult => {
     const errors: string[] = [];
     const warnings: string[] = [];
+    if (hasMissingParameterSwitches(dataPar)) errors.push(SWITCH_CONFIRMATION_GUIDANCE);
 
     const populationOnly = configModules?.length === 1 && configModules[0] === "population";
 
@@ -130,6 +136,7 @@ export default function ProcessingStatusAlert({ onResult }: ProcessingStatusAler
 
     return { errors, warnings, ready: errors.length === 0 };
   }, [
+    dataPar,
     configSubjects,
     configModules,
     configSelectedProfileId,

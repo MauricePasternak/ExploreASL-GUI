@@ -13,6 +13,7 @@ import { useGlobalStore } from "./globalStore";
 import { acceptedDataPar } from "./dataParStore";
 import { aslRunsEqual, normalizeAslRunId } from "../lib/aslRun";
 import { assembleDataPar } from "../lib/assembleDataPar";
+import { hasMissingParameterSwitches, SWITCH_CONFIRMATION_GUIDANCE } from "../lib/dataParDefaults";
 import {
   attachRun,
   confirmProcessingWorkersStopped,
@@ -332,6 +333,7 @@ export const useProcessingStore = create<ProcessingState>((set) => {
               );
           }
           const dataPar = acceptedDataPar();
+          if (hasMissingParameterSwitches(dataPar)) throw new Error(SWITCH_CONFIRMATION_GUIDANCE);
           const mapping = project.mappingState;
           const request = ProcessingRequestSchema.parse({
             requestId: crypto.randomUUID(),
@@ -341,7 +343,7 @@ export const useProcessingStore = create<ProcessingState>((set) => {
             executionProfile: structuredClone(profile),
             dataPar: assembleDataPar(dataPar),
             participants: {
-              correction: dataPar.enableMetadataGroupingCorrection ?? false,
+              correction: dataPar.enableMetadataGroupingCorrection!,
               subjectRows: (mapping?.subjectRows ?? []).map((row) => ({
                 subject: row.subject,
                 session: row.session,

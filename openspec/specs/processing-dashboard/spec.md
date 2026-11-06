@@ -119,6 +119,7 @@ Before Start, renderer preflight SHALL determine readiness using the following h
 4. Worker count > 0 and ≤ available cores when the core count is known
 5. If Population selected, worker count must be 1
 6. If ASL is selected, no selected discovered SubjectSession has `hasASL: false`; one such entry SHALL block the entire run, including selected Structural work
+7. Every scoped scalar switch has an accepted value; missing choices SHALL show actionable guidance to review and confirm proposed explicit choices in Parameters, without changing route access or filling defaults
 
 **Soft warnings (can proceed):**
 

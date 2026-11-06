@@ -3,11 +3,16 @@ import { TestMantineProvider as MantineProvider } from "../../test/render";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PreflightResult } from "./ProcessingStatusAlert";
 import { makeMatlabProfile } from "../../test/profileFixtures";
+import { PARAMETER_SWITCH_DEFAULTS } from "../../generated/bindings";
+import type { DataParState } from "../../schemas/dataParSchema";
 
 let mockConfig: Record<string, unknown> | null = null;
+let mockDataPar: DataParState = {};
 vi.mock("../../stores/projectStore", () => ({
   useProjectStore: (selector: (state: unknown) => unknown) =>
-    selector({ project: { uiState: { processing: { config: mockConfig } } } }),
+    selector({
+      project: { dataPar: mockDataPar, uiState: { processing: { config: mockConfig } } },
+    }),
 }));
 let mockAvailableSubjects: { subjectSession: string; module: string }[] = [];
 let mockSubjectStatuses: { subjectSession: string; module: string }[] = [];
@@ -67,6 +72,7 @@ describe("ProcessingStatusAlert", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockConfig = null;
+    mockDataPar = { ...PARAMETER_SWITCH_DEFAULTS };
     mockAvailableSubjects = [];
     mockSubjectStatuses = [];
     mockExecutionProfiles = [validProfile];
@@ -339,6 +345,7 @@ describe("ProcessingStatusAlert", () => {
     });
 
     it("calls onResult with ready=false when errors present", async () => {
+      mockDataPar = {};
       mockConfig = {
         subjects: [],
         modules: [],
@@ -348,7 +355,12 @@ describe("ProcessingStatusAlert", () => {
       const onResult = vi.fn();
       renderAlert(onResult);
       await waitFor(() => {
-        expect(onResult).toHaveBeenCalledWith(expect.objectContaining({ ready: false }));
+        expect(onResult).toHaveBeenCalledWith(
+          expect.objectContaining({
+            ready: false,
+            errors: expect.arrayContaining([expect.stringMatching(/confirm.*Parameters/)]),
+          }),
+        );
       });
     });
   });

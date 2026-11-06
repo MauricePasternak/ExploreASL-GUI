@@ -4,6 +4,23 @@ use std::{fs, path::Path};
 use uuid::Uuid;
 
 fn request(root: &Path) -> ProcessingRequest {
+    let mut data_par = serde_json::json!({"x": {}});
+    let switches = serde_json::to_value(crate::project::model::DataPar::switch_defaults()).unwrap();
+    for (key, value) in switches.as_object().unwrap() {
+        if key == "enableMetadataGroupingCorrection" {
+            continue;
+        }
+        let pointer = switch_pointer(key);
+        let mut section = &mut data_par;
+        for part in pointer.trim_start_matches('/').split('/') {
+            section = section
+                .as_object_mut()
+                .unwrap()
+                .entry(part)
+                .or_insert_with(|| serde_json::json!({}));
+        }
+        *section = value.clone();
+    }
     ProcessingRequest {
         request_id: Uuid::new_v4(),
         project_id: "legacy-project-id".into(),
@@ -17,7 +34,7 @@ fn request(root: &Path) -> ProcessingRequest {
             explore_asl_path: "unused".into(),
             explore_asl_version: None,
         },
-        data_par: serde_json::json!({"x": {"settings": {}}}),
+        data_par,
         participants: ParticipantInputs::default(),
         workers: 2,
         rerun_bids2legacy: false,
@@ -576,12 +593,45 @@ fn ipc_request_has_no_persisted_root_and_returns_current_or_historical_variant()
     project(temp.path());
     let state = state_with_active_project(temp.path());
     let request = request(temp.path());
-    let wire_request: ProcessingRequest =
+    let mut wire_request: ProcessingRequest =
         serde_json::from_value(serde_json::to_value(&request).unwrap()).unwrap();
     assert!(
         wire_request.project_root.as_os_str().is_empty(),
         "wire content cannot supply durable root identity"
     );
+    {
+        let mut config = state.project_config.lock().unwrap();
+        config.active.as_mut().unwrap().document.data_par.bTopUp = None;
+    }
+    assert!(
+        crate::processing::runs::reserve_request_impl(
+            &state,
+            wire_request.clone(),
+            ProcessingAdmission {
+                project_root: temp.path().into()
+            }
+        )
+        .unwrap_err()
+        .contains("bTopUp is missing")
+    );
+    {
+        let mut config = state.project_config.lock().unwrap();
+        config.active.as_mut().unwrap().document.data_par.bTopUp = Some(false);
+    }
+    wire_request.data_par["x"]["modules"]["asl"]["bTopUp"] = serde_json::json!(0);
+    assert!(
+        crate::processing::runs::reserve_request_impl(
+            &state,
+            wire_request.clone(),
+            ProcessingAdmission {
+                project_root: temp.path().into()
+            }
+        )
+        .unwrap_err()
+        .contains("bTopUp must match")
+    );
+    assert!(!temp.path().join(CURRENT_RECORD).exists());
+    wire_request.data_par["x"]["modules"]["asl"]["bTopUp"] = serde_json::json!(false);
     let first = crate::processing::runs::reserve_request_impl(
         &state,
         wire_request,
@@ -1143,7 +1193,9 @@ fn same_request_reservation_finishes_interrupted_acknowledgement() {
         let temp = tempfile::tempdir().unwrap();
         project(temp.path());
         let state = state_with_active_project(temp.path());
-        let terminal = terminal(temp.path(), request(temp.path()));
+        let mut sparse = request(temp.path());
+        sparse.data_par = serde_json::json!({"x": {}});
+        let terminal = terminal(temp.path(), sparse);
         state.processing_state.lock().unwrap().current_run =
             Some(ProcessingRun::from_record(terminal.clone()));
         crate::processing::journal::inject_fault(fault);

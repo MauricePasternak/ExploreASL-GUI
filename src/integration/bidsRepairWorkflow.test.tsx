@@ -17,6 +17,7 @@ import { join, relative } from "node:path";
 
 import ControlButtons from "../components/processing/ControlButtons";
 import { projectFixture } from "../test/projectFixtures";
+import { PARAMETER_SWITCH_DEFAULTS } from "../generated/bindings";
 import { useGlobalStore } from "../stores/globalStore";
 import { useProcessingStore } from "../stores/processingStore";
 import { useProjectStore } from "../stores/projectStore";
@@ -98,6 +99,7 @@ describe("existing BIDS project repair and retry integration", () => {
     await writeFile(join(root, ".bidsignore"), "derivatives/\r\n");
     const profile = useGlobalStore.getState().settings.executionProfiles[0]!;
     const persisted = projectFixture("11111111-1111-4111-8111-111111111111", "Current BIDS", root, {
+      dataPar: { ...PARAMETER_SWITCH_DEFAULTS },
       mappingState: { sourceDataPath: "." },
       uiState: {
         import: { bidsReviewConfirmed: true, mostRecentConfig: null },

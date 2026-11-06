@@ -6,6 +6,15 @@ Define processing lifecycle state, progress, and persistence behavior.
 
 ## Requirements
 
+### Requirement: Accepted switch readiness
+
+After flushing pending edits and before saving or submitting a fresh processing request, the store SHALL reject missing accepted scalar switch choices with guidance to review and confirm Parameters. It SHALL assemble only accepted configuration, preserving false and numeric zero without serializer backfill. Individual edits SHALL NOT accept unrelated missing choices. Historical native replay and recovery SHALL remain compatible with sparse requests.
+
+#### Scenario: Sparse accepted parameters block submission
+
+- **WHEN** Start is requested while any scoped switch lacks an accepted value
+- **THEN** the store SHALL report Parameters confirmation guidance without reserving or launching a run
+
 ### Requirement: Processing Phase State Machine
 
 The processing store SHALL project native `preparing`, `running`, `finalizing`, `completed`, `cancelling`, `cancelled`, `failed` and `interrupted` lifecycle states, plus local `idle` when no native run is attached. Runtime run identity and worker membership SHALL NOT persist as restart authority. Terminal phase and last run configuration SHALL save through exact terminal persistence. Idle progress SHALL reconstruct from safe status reads; active outcomes SHALL derive only from accepted native snapshots. Population commit, completion, version and ready-mtime metadata SHALL follow Exact processing terminal persistence; the frontend SHALL NOT probe files or classify worker completion.

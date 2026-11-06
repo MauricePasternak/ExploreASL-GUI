@@ -155,6 +155,22 @@ pub(crate) fn reserve_request_impl(
             snapshot: existing.snapshot(),
         });
     }
+    // Only fresh admission needs complete accepted choices. Exact retries and
+    // historical sparse records above retain their original request contract.
+    {
+        let config = state
+            .project_config
+            .lock()
+            .map_err(|_| "Project configuration lock was poisoned")?;
+        let active = config
+            .active
+            .as_ref()
+            .filter(|active| active.ownership.root() == project_root)
+            .ok_or("No accepted configuration for processing")?;
+        request
+            .validate_switch_choices(&active.document.data_par)
+            .map_err(|error| error.to_string())?;
+    }
     // Resume durable acknowledgement before replacement, including unlink
     // uncertainty that left only the in-memory terminal pin.
     if let Some(current) = super::record::records(&project_root)

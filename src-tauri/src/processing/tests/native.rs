@@ -100,6 +100,22 @@ fn fixture_with_profile(
         rerun_bids2legacy: false,
     };
     configure(root, &mut request);
+    let switches = serde_json::to_value(crate::project::model::DataPar::switch_defaults()).unwrap();
+    for (key, value) in switches.as_object().unwrap() {
+        if key == "enableMetadataGroupingCorrection" {
+            continue;
+        }
+        let pointer = switch_pointer(key);
+        let mut section = &mut request.data_par;
+        for part in pointer.trim_start_matches('/').split('/') {
+            section = section
+                .as_object_mut()
+                .unwrap()
+                .entry(part)
+                .or_insert_with(|| serde_json::json!({}));
+        }
+        *section = value.clone();
+    }
     let result = crate::processing::runs::reserve_request_impl(
         &state,
         request,

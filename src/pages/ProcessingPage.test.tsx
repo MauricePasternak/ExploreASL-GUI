@@ -7,6 +7,7 @@ import type { ProcessConfig } from "../schemas/processingSchemas";
 import { processingSnapshot } from "../test/processingFixtures";
 import type { LogFileInfo } from "../lib/logViewer";
 import type { ReportFileInfo } from "../lib/reportViewer";
+import { PARAMETER_SWITCH_DEFAULTS } from "../generated/bindings";
 
 const evidence = vi.hoisted(() => ({ logs: [] as LogFileInfo[], reports: [] as ReportFileInfo[] }));
 
@@ -115,6 +116,7 @@ describe("ProcessingPage", () => {
   });
 
   beforeEach(() => {
+    mockProject.project.dataPar = { ...PARAMETER_SWITCH_DEFAULTS };
     evidence.logs = [];
     evidence.reports = [];
     mockProject.project.uiState.processing.config = DEFAULT_CONFIG;

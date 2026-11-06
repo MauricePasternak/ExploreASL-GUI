@@ -6,6 +6,20 @@ use std::sync::Arc;
 pub(crate) fn state_with_active_project(root: &Path) -> Arc<AppState> {
     let state = Arc::new(AppState::default());
     crate::project::ownership::own_project(&state, &root.canonicalize().unwrap());
+    state.project_config.lock().unwrap().active =
+        Some(crate::project::config::ActiveProjectConfig {
+            document: crate::project::config::defaults(
+                "Processing".into(),
+                crate::project::model::DataSource::Bids,
+                "profile".into(),
+            )
+            .unwrap(),
+            ownership: crate::project::ownership::active(&state).unwrap(),
+            generation: 1,
+            accepted_revision: 0,
+            persisted_revision: 0,
+            recovered_from_backup: false,
+        });
     state
 }
 

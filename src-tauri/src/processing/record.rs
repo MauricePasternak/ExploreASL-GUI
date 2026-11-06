@@ -37,6 +37,49 @@ pub struct ProcessingRequest {
 pub struct ProcessingAdmission {
     pub project_root: PathBuf,
 }
+
+/// Operative destinations of scoped switches; metadata correction is carried
+/// separately in ParticipantInputs rather than scientific JSON.
+pub(crate) fn switch_pointer(key: &str) -> String {
+    let section = match key {
+        "bRunLongReg" | "bRunDARTEL" => "modules",
+        "DELETETEMP" | "bLesionFilling" | "bAutoACPC" => "settings",
+        "bSegmentSPM12" | "bHammersCAT12" | "bFixResolution" => "modules/structural",
+        "bWMH" => "S",
+        "bAutomaticallyDetectFSL" | "bAutomaticallyDetectVABY" => "external",
+        _ => "modules/asl",
+    };
+    format!("/x/{section}/{key}")
+}
+
+impl ProcessingRequest {
+    pub(crate) fn validate_switch_choices(
+        &self,
+        accepted: &crate::project::model::DataPar,
+    ) -> Result<()> {
+        let defaults = serde_json::to_value(crate::project::model::DataPar::switch_defaults())?;
+        let accepted = serde_json::to_value(accepted)?;
+        for key in defaults
+            .as_object()
+            .context("Invalid switch policy")?
+            .keys()
+        {
+            let value = accepted.get(key).filter(|value| !value.is_null()).with_context(|| {
+                format!("Review and confirm switch choices in Parameters before processing: {key} is missing")
+            })?;
+            let correction = serde_json::Value::Bool(self.participants.correction);
+            let submitted = if key == "enableMetadataGroupingCorrection" {
+                Some(&correction)
+            } else {
+                self.data_par.pointer(&switch_pointer(key))
+            };
+            if submitted != Some(value) {
+                bail!("Processing switch {key} must match the accepted Parameters choice");
+            }
+        }
+        Ok(())
+    }
+}
 #[derive(Clone, Debug, Default, Serialize, Deserialize, specta::Type)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct ParticipantInputs {
