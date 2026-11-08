@@ -10,4 +10,5 @@ e2e-tests/pnpm-lock.yaml
 .cursor/
 .opencode/
 .worktrees/
+.playwright-cli/
 src/lib/__fixtures__/

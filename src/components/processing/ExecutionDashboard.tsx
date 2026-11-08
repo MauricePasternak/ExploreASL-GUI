@@ -5,6 +5,7 @@ import {
   Box,
   Collapse,
   Group,
+  Loader,
   Progress,
   Stack,
   Text,
@@ -44,7 +45,7 @@ function StepIcon({ status }: { status: StepStatus["status"] }) {
       );
     case "running":
       return (
-        <IconPointFilled size={12} color="var(--mantine-color-pink-6)" data-testid="step-running" />
+        <Loader size={14} color="pink" data-testid="step-running" />
       );
     case "pending":
     default:
@@ -67,24 +68,41 @@ function StepTimeline({
   status: SubjectModuleStatus["status"];
   module: ModuleName;
 }) {
+  const remaining = remainingStepNames(
+    module,
+    steps.filter((step) => step.status === "complete").map((step) => step.name),
+  );
+  const running = steps.some((step) => step.status === "running");
   const timeline: StepStatus[] =
     status === "complete"
       ? steps.length
         ? steps
         : [{ name: "Completed", status: "complete" }]
       : [
-          ...steps,
-          ...remainingStepNames(
-            module,
-            steps.filter((step) => step.status === "complete").map((step) => step.name),
-          ).map((name): StepStatus => ({ name, status: "pending" })),
+          ...steps.map((step) =>
+            step.status === "running" && remaining.length ? { ...step, name: remaining[0] } : step,
+          ),
+          ...remaining.slice(running && remaining.length ? 1 : 0).map((name): StepStatus => ({
+            name,
+            status: "pending",
+          })),
         ];
   return (
     <div className="processing-timeline" data-testid="step-timeline">
       {timeline.map((step, i) => (
         <Tooltip
           key={`${step.name}-${i}`}
-          label={processingStepLabel(step.name)}
+          label={
+            step.status === "running" && step.name !== "Processing..." ? (
+              <span data-testid="step-running-description">
+                {processingStepLabel(step.name)}
+                <br />
+                Processing this module
+              </span>
+            ) : (
+              processingStepLabel(step.name)
+            )
+          }
           events={{ hover: true, focus: true, touch: true }}
         >
           <span
