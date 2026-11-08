@@ -51,6 +51,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  vi.restoreAllMocks();
   vi.clearAllMocks();
 });
 
@@ -401,6 +402,7 @@ describe("ProfileManager", () => {
   });
 
   it("opens delete confirmation and removes profile on confirm", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     const profile = makeMatlabProfile();
     useGlobalStore.setState({
       settings: { ...DEFAULT_SETTINGS, executionProfiles: [profile] },
@@ -417,6 +419,9 @@ describe("ProfileManager", () => {
     await waitFor(() => {
       expect(useGlobalStore.getState().settings.executionProfiles).toHaveLength(0);
     });
+    expect(warnSpy).toHaveBeenCalledExactlyOnceWith(
+      "[globalStore] Deleting the last execution profile. Project actions will be gated.",
+    );
   });
 
   it("warns when deleting the last profile", async () => {

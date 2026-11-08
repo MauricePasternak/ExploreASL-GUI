@@ -116,6 +116,7 @@ describe("processing native IPC", () => {
     expect(invoke).not.toHaveBeenCalled();
   });
   it("admits only exact-run status, lock, and increasing lifecycle events", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const run = processingSnapshot({ lifecycle: "preparing", revision: 1 });
     useProcessingStore.getState().bindRunSnapshot(run);
     expect(useProcessingStore.getState().attachmentGeneration).toBe(
@@ -206,6 +207,10 @@ describe("processing native IPC", () => {
       snapshot: { revision: 2 },
       subjectStatuses: [expect.objectContaining({ subjectSession: "sub-001_01" })],
     });
+    expect(warn).toHaveBeenCalledExactlyOnceWith(
+      "[processing] Malformed run event ignored",
+      expect.objectContaining({ channel: "LockRemoved", runId: run.runId }),
+    );
     cleanup();
   });
   it("normalizes lock scans", async () => {

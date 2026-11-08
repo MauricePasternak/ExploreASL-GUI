@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { showErrorNotification } from "../lib/errorNotifications";
 import { Store } from "@tauri-apps/plugin-store";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DEFAULT_SETTINGS } from "../schemas/globalSettings";
 import type { MatlabProfile } from "../schemas/executionProfile";
@@ -22,6 +22,8 @@ function makeMatlabProfile(overrides: Partial<MatlabProfile> = {}): MatlabProfil
 }
 
 describe("useGlobalStore", () => {
+  afterEach(() => vi.restoreAllMocks());
+
   beforeEach(async () => {
     vi.mocked(showErrorNotification).mockClear();
     useGlobalStore.setState({
@@ -356,6 +358,7 @@ describe("useGlobalStore", () => {
 
   describe("deleteProfile", () => {
     it("persists deletion automatically via saveSettings", async () => {
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
       const profile = makeMatlabProfile();
       await useGlobalStore.getState().addProfile(profile);
 
@@ -366,6 +369,9 @@ describe("useGlobalStore", () => {
         const persisted = await store.get<any[]>("executionProfiles");
         expect(persisted).toHaveLength(0);
       });
+      expect(warnSpy).toHaveBeenCalledExactlyOnceWith(
+        "[globalStore] Deleting the last execution profile. Project actions will be gated.",
+      );
     });
 
     it("deletes the last remaining profile and logs a warning", async () => {
@@ -458,6 +464,7 @@ describe("useGlobalStore", () => {
     });
 
     it("handles concurrent deletion gracefully and guards mirror invariant", async () => {
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
       const profile = makeMatlabProfile();
       await useGlobalStore.getState().addProfile(profile);
 
@@ -485,6 +492,9 @@ describe("useGlobalStore", () => {
 
       // Verify that no orphaned entry is added to profileValidationState
       expect(useGlobalStore.getState().profileValidationState[profile.id]).toBeUndefined();
+      expect(warnSpy).toHaveBeenCalledExactlyOnceWith(
+        "[globalStore] Deleting the last execution profile. Project actions will be gated.",
+      );
     });
   });
 

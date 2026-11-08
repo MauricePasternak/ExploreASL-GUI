@@ -63,6 +63,8 @@ describe("ProjectPage", () => {
         return null;
       if (
         command === "read_import_status" ||
+        command === "list_module_logs" ||
+        command === "list_subject_reports" ||
         command === "list_subjects" ||
         command === "read_lock_status"
       )
@@ -217,7 +219,13 @@ describe("ProjectPage", () => {
     vi.mocked(invoke).mockImplementation(async (command) => {
       if (command === "accept_project_edit" || command === "save_project") return processing;
       if (command === "get_active_run") return null;
-      if (command === "list_subjects" || command === "read_lock_status") return [];
+      if (
+        command === "list_subjects" ||
+        command === "read_lock_status" ||
+        command === "list_module_logs" ||
+        command === "list_subject_reports"
+      )
+        return [];
       throw new Error(`Unexpected command ${command}`);
     });
     useProjectStore.setState((state) => ({

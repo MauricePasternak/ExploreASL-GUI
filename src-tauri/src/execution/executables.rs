@@ -3,7 +3,7 @@
 
 use anyhow::{Result as AnyResult, anyhow, bail};
 use std::{
-    env, fs,
+    env,
     path::{Path, PathBuf},
 };
 
@@ -47,7 +47,7 @@ pub(crate) fn validate_executable_file(path: &Path) -> AnyResult<()> {
 pub(crate) fn is_executable_file(path: &Path) -> bool {
     use std::os::unix::fs::PermissionsExt;
 
-    fs::metadata(path)
+    std::fs::metadata(path)
         .map(|metadata| metadata.permissions().mode() & 0o111 != 0)
         .unwrap_or(false)
 }

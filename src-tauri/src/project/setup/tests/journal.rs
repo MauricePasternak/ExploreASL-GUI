@@ -5,8 +5,8 @@ use super::super::filesystem::{
     fixed_path, inspect, owned_sibling, random_id, relative_to_root, safe_relative,
 };
 use super::super::journal::{
-    OperationPhase, TransactionPhase, initial_journal, journal_path, read_journal,
-    update_operation, validate_journal, write_journal,
+    OperationPhase, initial_journal, journal_path, read_journal, update_operation,
+    validate_journal, write_journal,
 };
 use super::super::planning::preflight;
 use super::super::{OperationKind, SetupMode, recover_root};
@@ -77,6 +77,7 @@ fn initial_journal_claim_never_replaces_foreign_files() {
 #[cfg(unix)]
 #[test]
 fn journal_updates_are_same_parent_replacements_not_truncates() {
+    use super::super::journal::TransactionPhase;
     use std::os::unix::fs::MetadataExt;
 
     let root = TempDir::new().unwrap();

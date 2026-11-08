@@ -1,12 +1,13 @@
+#[cfg(unix)]
+use crate::app::state::AppState;
 use crate::{
-    app::state::AppState,
     execution::profile::ExecutionProfile,
     processing::{record::*, types::*},
 };
-use std::{
-    fs,
-    time::{Duration, Instant},
-};
+use std::fs;
+#[cfg(unix)]
+use std::time::{Duration, Instant};
+#[cfg(unix)]
 use tauri::Manager;
 
 #[cfg(unix)]
@@ -130,6 +131,7 @@ fn fixture_with_profile(
     (temp, app, snapshot.run_id)
 }
 
+#[cfg(unix)]
 const READY: &str = "mkdir -p derivatives/ExploreASL/lock/xASL_module_Population/xASL_module_Population\nprintf ready > derivatives/ExploreASL/lock/xASL_module_Population/xASL_module_Population/999_ready.status";
 
 #[cfg(unix)]

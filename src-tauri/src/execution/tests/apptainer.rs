@@ -6,11 +6,10 @@ use crate::execution::command::should_redirect_cwd;
 use std::env;
 #[cfg(unix)]
 use std::fs;
-use std::path::{Path, PathBuf};
-use std::time::Duration;
+use std::path::Path;
 
 #[cfg(unix)]
-fn apptainer_stub(root: &Path, script: &str) -> PathBuf {
+fn apptainer_stub(root: &Path, script: &str) -> std::path::PathBuf {
     let binary = root.join("apptainer");
     write_executable(&binary, &format!("#!/bin/sh\n{script}\n"));
     binary
@@ -75,7 +74,7 @@ fn apptainer_probes_preserve_failure_status_and_image_stderr() {
 #[test]
 fn apptainer_discovery_and_profile_timeout_settle_supported_scopes() {
     use crate::execution::profile::ExecutionProfile;
-    use std::time::Instant;
+    use std::time::{Duration, Instant};
 
     for image_probe in [false, true] {
         let root = tempfile::tempdir().unwrap();

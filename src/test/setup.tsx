@@ -1,5 +1,8 @@
 import { vi } from "vitest";
+import { Fragment } from "react";
 import "@testing-library/jest-dom/vitest";
+
+HTMLCanvasElement.prototype.getContext = () => null;
 
 // jsdom has no layout or ResizeObserver. TestMantineProvider also respects reduced motion.
 if (!Element.prototype.scrollIntoView) {
@@ -128,6 +131,7 @@ vi.mock("@tauri-apps/api/core", () => ({
           errors: [],
         });
       case "validate_all_execution_profiles":
+      case "read_data_columns":
       case "read_import_status":
       case "list_subject_reports":
       case "list_module_logs":
@@ -282,7 +286,9 @@ vi.mock("react-virtuoso", () => ({
     itemContent: (index: number, line: string) => React.ReactNode;
   }) => (
     <div data-testid="virtuoso">
-      {data?.map((item: string, index: number) => itemContent(index, item))}
+      {data?.map((item: string, index: number) => (
+        <Fragment key={index}>{itemContent(index, item)}</Fragment>
+      ))}
     </div>
   ),
   TableVirtuoso: ({

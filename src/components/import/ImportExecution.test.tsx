@@ -158,7 +158,7 @@ describe("ImportExecution authoritative lifecycle", () => {
     useImportStore.getState().bindImportRunSnapshot(interrupted);
     vi.mocked(invoke).mockImplementation(async (command) => {
       if (command === "get_active_import_run") return null;
-      if (command === "read_import_status") return [];
+      if (command === "read_import_status" || command === "list_module_logs") return [];
       if (command === "confirm_import_worker_stopped") return confirmation;
       return undefined;
     });
@@ -337,6 +337,7 @@ describe("ImportExecution authoritative lifecycle", () => {
     activateProjectLease("project-1", "/project");
     vi.mocked(invoke).mockImplementation(async (command) => {
       if (command === "get_active_import_run" || command === "attach_import_run") return running;
+      if (command === "list_module_logs") return [];
       return null;
     });
 
@@ -390,6 +391,7 @@ describe("ImportExecution authoritative lifecycle", () => {
       if (command === "get_active_import_run" || command === "attach_import_run") return completed;
       if (command === "get_project_snapshot" || command === "reconcile_import_result")
         return reconciled;
+      if (command === "list_module_logs") return [];
       return undefined;
     });
 
@@ -419,7 +421,10 @@ describe("ImportExecution authoritative lifecycle", () => {
     });
     activateProjectLease("project-1", "/project");
     const error = new Error("native unavailable");
-    vi.mocked(invoke).mockRejectedValue(error);
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === "list_module_logs") return [];
+      throw error;
+    });
 
     renderExecution();
 
@@ -477,7 +482,7 @@ describe("ImportExecution authoritative lifecycle", () => {
     vi.mocked(invoke).mockImplementation(async (command) => {
       if (command === operation) throw error;
       if (command === "get_active_import_run") return null;
-      if (command === "read_import_status") return [];
+      if (command === "read_import_status" || command === "list_module_logs") return [];
       if (command === "plan_import_relocation")
         return { planId: "plan", subjects: [], fingerprint: "fingerprint" };
       return run;
@@ -525,6 +530,7 @@ describe("ImportExecution authoritative lifecycle", () => {
       activateProjectLease("project-1", "/project");
       vi.mocked(invoke).mockImplementation(async (command) => {
         if (command === operation) throw error;
+        if (command === "list_module_logs") return [];
         return run;
       });
       renderExecution();
@@ -615,7 +621,7 @@ describe("ImportExecution authoritative lifecycle", () => {
     });
     vi.mocked(invoke).mockImplementation(async (command, params) => {
       if (command === "get_active_import_run") return null;
-      if (command === "read_import_status") return [];
+      if (command === "read_import_status" || command === "list_module_logs") return [];
       if (command === "save_project") {
         order.push("save");
         await new Promise<void>((resolve, reject) => {
@@ -714,7 +720,7 @@ describe("ImportExecution authoritative lifecycle", () => {
         });
         return configured;
       }
-      return command === "read_import_status" ? [] : null;
+      return command === "read_import_status" || command === "list_module_logs" ? [] : null;
     });
     renderExecution();
     await userEvent.click(screen.getByTestId("import-next-params-btn"));

@@ -798,7 +798,7 @@ describe("ImportPage import runner step", () => {
     vi.mocked(invoke).mockImplementation(async (command) => {
       if (command === "preflight_staging_plan") return { valid: true, issues: [] };
       if (command === "accept_project_edit") return accepted;
-      if (command === "read_import_status") return [];
+      if (command === "read_import_status" || command === "list_module_logs") return [];
       if (command === "get_active_import_run") return null;
       return undefined;
     });
@@ -829,7 +829,7 @@ describe("ImportPage import runner step", () => {
     useImportStore.setState({ importPhase: "running" });
     vi.mocked(invoke).mockImplementation(async (command) => {
       if (command === "get_active_import_run") return null;
-      if (command === "read_import_status") return [];
+      if (command === "read_import_status" || command === "list_module_logs") return [];
       return undefined;
     });
 
@@ -879,7 +879,7 @@ describe("ImportPage stepper navigation", () => {
     if (activeStep === 5) useImportStore.setState({ importPhase: "failed" });
     vi.mocked(invoke).mockImplementation(async (command) => {
       if (command === "get_active_import_run") return null;
-      if (command === "read_import_status") return [];
+      if (command === "read_import_status" || command === "list_module_logs") return [];
       if (command === "preflight_staging_plan") return { valid: false, issues: [] };
       return undefined;
     });

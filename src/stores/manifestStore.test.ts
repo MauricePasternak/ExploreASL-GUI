@@ -79,7 +79,7 @@ describe("useManifestStore", () => {
     invalidateProjectLease();
     activateProjectLease("same-id", "/project-b");
     useManifestStore.getState().resetManifest();
-    resolveQc({ "sub-01_01": { coverage: 90 } });
+    resolveQc({ "sub-01_01": { coverage: 90, motion: [] } });
     await load;
 
     expect(useManifestStore.getState().qcData).toBeNull();

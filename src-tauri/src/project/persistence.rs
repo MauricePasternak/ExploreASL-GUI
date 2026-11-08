@@ -392,6 +392,7 @@ fn sync_backup_rotation(
     }
     #[cfg(not(unix))]
     {
+        let _ = parent;
         log::debug!("Parent directory flush is unsupported on this platform");
         Ok(())
     }
@@ -425,6 +426,7 @@ fn sync_parent(parent: &Path, failure: Option<FailurePoint>) -> Result<bool, Ato
     }
     #[cfg(not(unix))]
     {
+        let _ = parent;
         log::debug!("Parent directory flush is unsupported on this platform");
         Ok(false)
     }

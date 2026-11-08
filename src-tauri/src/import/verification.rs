@@ -1,7 +1,7 @@
 use super::status::import_lock_dir;
 use super::types::{ImportStructuredError, ImportSubjectOutcome, ImportSubjectOutcomeKind};
 use anyhow::{Context, Result, bail};
-use std::fs::{self, File, OpenOptions};
+use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::Path;
 
@@ -37,7 +37,7 @@ pub fn prepare_generation(staging_root: &Path, subjects: &[String]) -> Result<St
     file.sync_all()
         .with_context(|| format!("Failed to flush {}", marker.display()))?;
     #[cfg(unix)]
-    File::open(staging_root)
+    fs::File::open(staging_root)
         .context("Failed to open staging root for generation sync")?
         .sync_all()
         .context("Failed to flush staging generation directory")?;

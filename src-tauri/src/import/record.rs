@@ -44,7 +44,7 @@ thread_local! {
     };
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 pub(crate) fn swap_record_parent_before_publish(project_root: PathBuf, foreign_parent: PathBuf) {
     RECORD_PUBLISH_SWAP.with(|swap| *swap.borrow_mut() = Some((project_root, foreign_parent)));
 }

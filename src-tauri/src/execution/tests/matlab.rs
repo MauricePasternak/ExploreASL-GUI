@@ -4,7 +4,6 @@ use std::fs;
 use std::path::PathBuf;
 #[cfg(unix)]
 use std::process::Command;
-use std::time::Duration;
 
 // From manifest.rs tests:
 #[test]
@@ -76,7 +75,7 @@ fn detect_matlab_version_rejects_failure() {
 #[cfg(unix)]
 #[test]
 fn matlab_discovery_timeout_settles_supported_scope() {
-    use std::time::Instant;
+    use std::time::{Duration, Instant};
 
     let temp = get_test_temp_dir();
     let binary = temp.path().join("matlab");

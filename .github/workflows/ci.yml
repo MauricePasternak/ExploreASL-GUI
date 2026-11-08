@@ -220,7 +220,28 @@ jobs:
       - name: Cache conformance dependencies (network allowed)
         run: deno install --config tools/bids-conformance/deno.json --frozen --entrypoint tools/bids-conformance/check.ts
       - name: Test native BIDS inheritance
+        id: native-bids
         run: "cargo test --locked --manifest-path src-tauri/Cargo.toml -p exploreasl_gui bids::"
+      - name: Diagnose Windows test executable startup
+        if: failure() && runner.os == 'Windows' && steps.native-bids.outcome == 'failure'
+        timeout-minutes: 2
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem src-tauri/target/debug/deps/exploreasl_gui_lib-*.exe |
+            Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          if (-not $exe) { throw 'Native test executable not found' }
+          Get-Command gdb.exe -ErrorAction Stop | Out-Null
+          $imageKey = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\$($exe.Name)"
+          # Per-image loader snaps report the missing symbol and the DLL actually loaded.
+          New-Item -Path $imageKey -Force | Out-Null
+          try {
+            New-ItemProperty -Path $imageKey -Name GlobalFlag -PropertyType DWord -Value 2 -Force | Out-Null
+            $runner = 'target.x86_64-pc-windows-msvc.runner=["gdb.exe", "--batch", "--nx", "-ex", "set debuginfod enabled off", "-ex", "set confirm off", "-ex", "run", "-ex", "info sharedlibrary", "--args"]'
+            # Keep Cargo's DLL search environment; enumerate tests without running them.
+            cargo test --locked --manifest-path src-tauri/Cargo.toml -p exploreasl_gui --lib --config $runner bids:: -- --list
+          } finally {
+            Remove-ItemProperty -Path $imageKey -Name GlobalFlag
+          }
       - name: Test Windows import preflight regression
         if: runner.os == 'Windows'
         run: cargo test --locked --manifest-path src-tauri/Cargo.toml -p exploreasl_gui import::tests::pipeline::windows_absolute_run_alias_rejection_preserves_staging_and_run -- --exact

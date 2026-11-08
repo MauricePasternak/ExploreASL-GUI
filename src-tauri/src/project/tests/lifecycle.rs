@@ -1,6 +1,6 @@
 use crate::app::state::AppState;
 use crate::import::ImportLifecycle;
-use crate::processing::{ProcessState, ProcessingLifecycle, ProcessingRun};
+use crate::processing::{ProcessingLifecycle, ProcessingRun};
 use crate::project::lifecycle::*;
 use crate::visualization::ActiveData;
 use std::fs;
@@ -143,6 +143,8 @@ fn unmanaged_import_fails_shutdown_and_retains_ownership() {
 #[cfg(unix)]
 #[test]
 fn process_state_retains_run_not_pid_or_project_fields() {
+    use crate::processing::ProcessState;
+
     let state = ProcessState::default();
     assert!(state.current_run.is_none());
     assert!(state.watcher_run_id.is_none());

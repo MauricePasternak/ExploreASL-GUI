@@ -3,7 +3,6 @@ use std::path::Path;
 
 use tempfile::tempdir;
 
-use super::super::candidate::create_owned_parent_dirs;
 use super::super::journal::{
     JOURNAL_VERSION, journal_path, journal_temp_path, read_journal, validate_journal, write_journal,
 };
@@ -97,6 +96,7 @@ fn exact_stale_next_journal_temp_name_cannot_block_persistence() {
 #[cfg(unix)]
 #[test]
 fn owned_parent_creation_rejects_nested_symlink_ancestor() {
+    use super::super::candidate::create_owned_parent_dirs;
     use std::os::unix::fs::symlink;
 
     let workspace = tempdir().unwrap();

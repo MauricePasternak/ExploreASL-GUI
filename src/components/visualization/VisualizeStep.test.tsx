@@ -87,7 +87,9 @@ describe("VisualizeStep", () => {
   });
 
   it("renders panels and keeps an independent pin across modes and primary clearing", async () => {
-    renderComponent();
+    await act(async () => {
+      renderComponent();
+    });
     expect(screen.getByTestId("dataviz-visualize-step")).toBeInTheDocument();
     expect(screen.getByTestId("dataviz-chart-panel")).toBeInTheDocument();
     expect(screen.getByTestId("dataviz-viewer-panel")).toBeInTheDocument();
@@ -174,7 +176,9 @@ describe("VisualizeStep", () => {
 
   it("links world navigation and shares only pinned numeric CBF windows", async () => {
     const install = vi.spyOn(Niivue.prototype, "addVolume");
-    renderComponent();
+    await act(async () => {
+      renderComponent();
+    });
     act(() => {
       const scan = {
         id: "A",

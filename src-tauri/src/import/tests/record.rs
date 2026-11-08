@@ -1,8 +1,7 @@
 use crate::import::record::{
     ImportRunRecord, RecordFaultPoint, checkpoint_relocation_outcome, fail_next_record_removal,
-    inject_fault, load_record, record_from_state, record_path, remove_record,
-    swap_record_parent_before_publish, validate_record, validate_relocation_recovery_authority,
-    write_record,
+    inject_fault, load_record, record_from_state, record_path, validate_record,
+    validate_relocation_recovery_authority, write_record,
 };
 use crate::import::relocation::{
     RelocationEntry, RelocationEntryKind, RelocationOutcome, RelocationPlan,
@@ -155,6 +154,8 @@ fn failed_replacement_preserves_prior_valid_record() {
 #[cfg(unix)]
 #[test]
 fn record_publish_component_swap_never_writes_foreign_parent() {
+    use crate::import::record::swap_record_parent_before_publish;
+
     let project = tempfile::tempdir().unwrap();
     let foreign = tempfile::tempdir().unwrap();
     let prior = record_from_state(&run(project.path())).unwrap();
@@ -943,6 +944,7 @@ fn symlinked_record_blocks_recovery_without_following_target() {
 #[cfg(unix)]
 #[test]
 fn symlinked_record_parent_blocks_all_record_operations() {
+    use crate::import::record::remove_record;
     use std::os::unix::fs::symlink;
     let temp = tempfile::tempdir().unwrap();
     let outside = tempfile::tempdir().unwrap();

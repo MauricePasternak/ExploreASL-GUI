@@ -79,6 +79,8 @@ describe("Layout", () => {
         return null;
       if (
         command === "read_import_status" ||
+        command === "list_module_logs" ||
+        command === "list_subject_reports" ||
         command === "list_subjects" ||
         command === "read_lock_status"
       )
