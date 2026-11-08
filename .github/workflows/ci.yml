@@ -221,6 +221,12 @@ jobs:
         run: deno install --config tools/bids-conformance/deno.json --frozen --entrypoint tools/bids-conformance/check.ts
       - name: Test native BIDS inheritance
         run: "cargo test --locked --manifest-path src-tauri/Cargo.toml -p exploreasl_gui bids::"
+      - name: Test Windows import preflight regression
+        if: runner.os == 'Windows'
+        run: cargo test --locked --manifest-path src-tauri/Cargo.toml -p exploreasl_gui import::tests::pipeline::windows_absolute_run_alias_rejection_preserves_staging_and_run -- --exact
+      - name: Test Windows processing acknowledgement regression
+        if: runner.os == 'Windows'
+        run: cargo test --locked --manifest-path src-tauri/Cargo.toml -p exploreasl_gui processing::tests::native::windows_acknowledgement_preserves_terminal_until_committed_archive_cleanup_succeeds -- --exact
       - name: Validate fixture (network denied)
         run: deno task --config tools/bids-conformance/deno.json check
 

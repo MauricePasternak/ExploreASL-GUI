@@ -531,6 +531,7 @@ fn cancellation_before_launch_is_durable_and_has_no_scientific_effect() {
     );
 }
 
+#[cfg(unix)]
 #[test]
 fn acknowledgement_cleans_committed_archive_and_keeps_terminal_on_cleanup_failure() {
     let (root, app, run_id) = fixture(READY, "dicom", 1);
@@ -569,6 +570,84 @@ fn acknowledgement_cleans_committed_archive_and_keeps_terminal_on_cleanup_failur
     assert!(
         !backup.exists(),
         "acknowledged settled archive remained pinned"
+    );
+}
+
+#[cfg(windows)]
+#[test]
+fn windows_acknowledgement_preserves_terminal_until_committed_archive_cleanup_succeeds() {
+    use crate::processing::{runs::acknowledge_locked, transaction::LaunchTransaction};
+
+    let workspace = tempfile::tempdir().unwrap();
+    let root = workspace.path().canonicalize().unwrap();
+    fs::write(
+        root.join("project.easl"),
+        br#"{"projectMeta":{"id":"windows-processing","dataSource":"dicom"}}"#,
+    )
+    .unwrap();
+    let state = super::common::state_with_active_project(&root);
+    let previous = admit(
+        &root,
+        ProcessingRequest {
+            request_id: uuid::Uuid::new_v4(),
+            project_id: "windows-processing".into(),
+            project_root: root.clone(),
+            selected_modules: vec!["population".into()],
+            selected_subject_sessions: Vec::new(),
+            execution_profile: ExecutionProfile::Matlab {
+                id: "profile".into(),
+                label: "Windows".into(),
+                matlab_path: root.join("not-reached.exe").display().to_string(),
+                explore_asl_path: root.join("not-reached").display().to_string(),
+                explore_asl_version: None,
+            },
+            data_par: serde_json::json!({"x": {}}),
+            participants: ParticipantInputs::default(),
+            workers: 1,
+            rerun_bids2legacy: false,
+        },
+    )
+    .unwrap();
+    let derivative = root.join("derivatives/ExploreASL");
+    fs::create_dir_all(&derivative).unwrap();
+    fs::write(derivative.join("dataPar.json"), b"prior").unwrap();
+    let run_id = previous.run_id;
+    let mut transaction =
+        LaunchTransaction::plan(&root, &run_id.to_string(), &[false, false, true], "", false)
+            .unwrap();
+    transaction.prepare(b"committed configuration").unwrap();
+    transaction.commit().unwrap();
+    drop(transaction);
+    // Model a settled post-commit launch failure without starting scientific work.
+    let mut record = previous.clone();
+    record.execution_committed = true;
+    record.set_lifecycle(ProcessingLifecycle::Failed).unwrap();
+    persist(&record, Some(&previous)).unwrap();
+    let mut processing = state.processing_state.lock().unwrap();
+    processing.current_run = Some(ProcessingRun::from_record(record.clone()));
+    let backup = root.join(format!(
+        "derivatives/ExploreASL_GUI/processing/runs/{run_id}/backups/0"
+    ));
+    fs::write(&backup, b"foreign replacement").unwrap();
+    let error = acknowledge_locked(&root, &mut processing, run_id, record.revision).unwrap_err();
+    assert!(error.contains("archive cleanup requires retry"));
+    assert_eq!(records(&root).unwrap()[0].snapshot(), record.snapshot());
+    assert!(!records(&root).unwrap()[0].acknowledged);
+    assert_eq!(
+        processing.current_run.as_ref().unwrap().snapshot(),
+        record.snapshot()
+    );
+    assert_eq!(fs::read(&backup).unwrap(), b"foreign replacement");
+    fs::write(&backup, b"prior").unwrap();
+    let replay = acknowledge_locked(&root, &mut processing, run_id, record.revision).unwrap();
+    assert!(replay.acknowledged);
+    assert_eq!(replay.terminal_revision, record.revision);
+    assert!(!backup.exists());
+    assert!(!root.join(CURRENT_RECORD).exists());
+    assert!(processing.current_run.is_none());
+    assert_eq!(
+        fs::read(derivative.join("dataPar.json")).unwrap(),
+        b"committed configuration"
     );
 }
 

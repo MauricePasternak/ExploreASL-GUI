@@ -1,5 +1,4 @@
 use crate::app::state::AppState;
-#[cfg(unix)]
 use crate::execution::profile::ExecutionProfile;
 use crate::import::finalization::{complete_finalizing_import, record_import_process_exit};
 use crate::import::parser::ImportStructuredEvent;
@@ -1152,5 +1151,76 @@ fn launch_revalidation_failure_settles_only_the_reserved_run_without_staging_mut
     assert_eq!(
         record::load_record(&root).unwrap().unwrap().snapshot,
         snapshot
+    );
+}
+
+#[cfg(windows)]
+#[test]
+fn windows_absolute_run_alias_rejection_preserves_staging_and_run() {
+    use crate::import::staging::{StagingField, StagingIssueCode};
+    use crate::import::types::ImportCommandError;
+
+    let workspace = tempfile::tempdir().unwrap();
+    let root = workspace.path().canonicalize().unwrap();
+    let state = running_state(&root);
+    {
+        let mut run = state.import_state.lock().unwrap();
+        run.lifecycle = ImportLifecycle::Preparing;
+        record::write_record(&root, &record::record_from_state(&run).unwrap()).unwrap();
+    }
+    let app = tauri::test::mock_builder()
+        .manage(state)
+        .build(tauri::test::mock_context(tauri::test::noop_assets()))
+        .unwrap();
+    let state = app.state::<AppState>();
+    let before = state.import_state.lock().unwrap().snapshot();
+    let staging = root.join(".easl_staging");
+    fs::create_dir(&staging).unwrap();
+    fs::write(staging.join("sentinel"), b"keep staging").unwrap();
+    let source = root.join("source.dcm");
+    fs::write(&source, b"keep source").unwrap();
+    let error = run_import_pipeline_impl(
+        app.handle().clone(),
+        &state,
+        vec![StagingEntry {
+            subject: "ONE".into(),
+            session: "01".into(),
+            run: "01".into(),
+            run_alias: root.join("escaped").display().to_string(),
+            modality: "ASL4D".into(),
+            original_subject: "ONE".into(),
+            original_session: "01".into(),
+            original_run: "01".into(),
+            source_path: source.display().to_string(),
+        }],
+        serde_json::json!({}),
+        serde_json::json!({}),
+        ExecutionProfile::Matlab {
+            id: "profile-1".into(),
+            label: "Windows".into(),
+            matlab_path: root.join("not-reached.exe").display().to_string(),
+            explore_asl_path: root.join("not-reached").display().to_string(),
+            explore_asl_version: None,
+        },
+        vec!["ONE".into()],
+        None,
+        before.run_id.clone(),
+        "plan-1".into(),
+    )
+    .unwrap_err();
+    let ImportCommandError::Preflight { issues, .. } = error else {
+        panic!("expected staging preflight rejection");
+    };
+    assert!(issues.iter().any(|issue| {
+        issue.code == StagingIssueCode::AbsoluteComponent && issue.field == StagingField::RunAlias
+    }));
+    assert_eq!(fs::read(staging.join("sentinel")).unwrap(), b"keep staging");
+    assert_eq!(fs::read_dir(&staging).unwrap().count(), 1);
+    assert_eq!(fs::read(source).unwrap(), b"keep source");
+    assert!(!root.join("escaped").exists());
+    assert_eq!(state.import_state.lock().unwrap().snapshot(), before);
+    assert_eq!(
+        record::load_record(&root).unwrap().unwrap().snapshot,
+        before
     );
 }
