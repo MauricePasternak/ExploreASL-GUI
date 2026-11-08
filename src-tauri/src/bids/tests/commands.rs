@@ -452,7 +452,7 @@ fn ambiguous_associations_error_in_detection_and_skip_only_affected_review_sessi
         let tmp = TempDir::new().unwrap();
         let root = tmp.path();
         create_bids_dataset(root, 1, false);
-        let perf = root.join("sub-01/ses-02/perf");
+        let perf = root.join("sub-01").join("ses-02").join("perf");
         fs::create_dir_all(&perf).unwrap();
         let image = perf.join("sub-01_acq-fast_run-01_asl.nii");
         fs::write(&image, b"fake").unwrap();
@@ -466,7 +466,7 @@ fn ambiguous_associations_error_in_detection_and_skip_only_affected_review_sessi
             assert!(error.contains(path.to_str().unwrap()), "{error}");
         }
         // An explicit session supersedes this subject's cross-sectional perf/.
-        let unaffected = root.join("sub-02/perf");
+        let unaffected = root.join("sub-02").join("perf");
         fs::create_dir_all(&unaffected).unwrap();
         fs::write(unaffected.join("sub-02_asl.nii"), b"fake").unwrap();
         let scan = scan_bids_sidecars_impl(root).unwrap();
@@ -481,10 +481,10 @@ fn invalid_ancestor_json_is_detected_structurally_but_not_bypassed_during_review
         let tmp = TempDir::new().unwrap();
         let root = tmp.path();
         create_bids_dataset(root, 2, false);
-        let source = root.join("sub-01/asl.json");
+        let source = root.join("sub-01").join("asl.json");
         fs::write(&source, invalid).unwrap();
         assert_eq!(check_bids_dataset_impl(root).unwrap().asl_subject_count, 2);
-        let image = root.join("sub-01/perf/sub-01_asl.nii.gz");
+        let image = root.join("sub-01").join("perf").join("sub-01_asl.nii.gz");
         let sources = crate::bids::sidecar::discover_metadata(root, &image).unwrap();
         assert!(
             crate::bids::sidecar::load_effective_json(&sources)
