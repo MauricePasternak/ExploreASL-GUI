@@ -8,6 +8,13 @@ Define backend execution and monitoring of ExploreASL processing.
 
 ### Requirement: Module Log File Cleanup
 
+Processing preparation SHALL journal-quarantine only selected matching module logs, handling Population independently and preserving unrelated non-log files.
+
+#### Scenario: Preparation quarantines historical selected-module logs
+
+- **WHEN** `run_pipeline` prepares enabled modules and subject scope
+- **THEN** filename matching, Population scope, and absent-directory behavior SHALL follow these rules:
+
 During preparation, `run_pipeline` SHALL quarantine existing selected ExploreASL module log files under the durable pre-execution journal from `<project_root>/derivatives/ExploreASL/log/` for each enabled module matching the subject regexp filter. Log files follow the naming pattern `{module_name}_sub-{Subject}_{Session}[_...].log`. The subject/session SHALL be extracted from the filename using the pattern `sub-[^_]+_[^_.]+` and tested against `subject_regexp`. The Population module SHALL have its log file quarantined regardless of subject regexp match (no per-subject granularity). Non-log files (`.json`, `.csv`) in the log directory SHALL NOT be affected. If the log directory does not exist, the cleanup SHALL succeed silently.
 
 #### Scenario: Structural log deleted for matching subject
@@ -55,6 +62,13 @@ The `read_lock_status` Tauri command SHALL accept `project_root: String` and ret
 - **THEN** `status` SHALL be `"incomplete"` and `completedSteps` SHALL list all existing step codes
 
 ### Requirement: list_subjects Command
+
+Native subject discovery SHALL use the common BIDS parser at the source-appropriate root, returning the existing subject/session/run contract with filename-based module availability rather than directory-only or scientific validation claims.
+
+#### Scenario: Processing discovers project subjects and available modules
+
+- **WHEN** `list_subjects` is invoked through Tauri IPC
+- **THEN** root selection, field mapping, run normalization, and availability SHALL follow these rules:
 
 The `list_subjects(project_root: String, data_source: Option<String>)` command SHALL delegate to `bids::scan::parse_bids_structure` on:
 
@@ -127,6 +141,13 @@ BIDS2Legacy runs as part of each ExploreASL invocation before the selected proce
 
 ### Requirement: ExploreASL Version Detection
 
+ExploreASL version detection SHALL use the selected or reserved profile and native managed preparation, reusing save validation and preserving accepted run provenance without renderer processing-time probes.
+
+#### Scenario: Profile validation or processing captures software version
+
+- **WHEN** startup, profile save, or pipeline preparation requires version information
+- **THEN** detection sources, result reuse, persistence, and Settings display SHALL follow these rules:
+
 The `detect_exploreasl_version` Tauri command SHALL remain unchanged. Its usage SHALL shift from being called with the global `exploreAslPath` to being called with the `exploreAslPath` from the selected execution profile. The version SHALL be detected:
 
 1. **On app startup and profile save**: profile validation SHALL re-detect `exploreAslVersion` and persist it if changed. Profile save SHALL reuse its single validation result as defined in `execution-profiles`.
@@ -146,6 +167,13 @@ The Settings modal SHALL display the detected version on each profile's ExploreA
 - **THEN** the version `"1.11.0"` SHALL be logged via `log::info!` before any destructive operations
 
 ### Requirement: Command Execution for Apptainer Profiles
+
+Native Apptainer import and processing SHALL use exact reserved work, clean container environments and owned dataset bindings, with cancellable bounded MCR warmup and the specified worker arguments and staggering.
+
+#### Scenario: An Apptainer profile prepares and launches scientific work
+
+- **WHEN** import or processing uses the compiled ExploreASL container
+- **THEN** command lines, cache selection, warmup, bindings, and worker launch SHALL follow these rules:
 
 The Tauri commands `launch_import_run` and `run_pipeline` SHALL support execution using the `apptainer` profile type. Import launch SHALL use its exact reservation and typed profile; processing launch SHALL use only the run ID of an immutable request containing that profile.
 
@@ -196,6 +224,13 @@ The Tauri commands `launch_import_run` and `run_pipeline` SHALL support executio
 
 ### Requirement: Immutable durable processing request
 
+Processing reservation SHALL persist validated immutable work and target inventory before mutation, support exact-content idempotent replay, and enforce accepted scalar switches only at fresh admission without changing historical compatibility.
+
+#### Scenario: Native processing receives a fresh or repeated reservation
+
+- **WHEN** requested work and accepted configuration enter native admission
+- **THEN** identity, effective targets, replay, path content, and scalar-switch enforcement SHALL follow these rules:
+
 Native reservation SHALL validate the active project and an immutable request containing selected work, execution profile, configuration, and participant-generation inputs. It SHALL assign a UUID, persist the request and expected target inventory, and reject empty effective work before destructive mutation. Repeating a request identity with identical canonical content SHALL return the same reservation identity; reuse with different content SHALL reject. Current-root admission metadata SHALL be validated separately and SHALL NOT become persistent request identity. Project-internal path fields SHALL compare portably; external execution/source paths SHALL remain request content. Launch SHALL use only the exact reserved request, not replacement renderer arguments.
 
 For Structural and ASL, native reservation SHALL interpret an empty `selectedSubjectSessions` list as all discovered SubjectSessions, not as empty work. A nonempty list SHALL restrict inventory to those entries and SHALL reject entries absent from native discovery. Expected targets SHALL omit unavailable modules per SubjectSession; Population SHALL contribute one dataset-level target independently of subject selection. This native contract SHALL remain distinct from the renderer's empty-selection and missing-ASL hard blocks. Preparation SHALL rederive the effective targets and reject changed target inventory rather than silently alter the reserved set.
@@ -235,6 +270,13 @@ After existing exact-request replay lookup and before fresh reservation, process
 
 ### Requirement: Native processing preparation
 
+Native preparation SHALL verify existing BIDS compatibility and own confined configuration, derivative participant generation, version capture, quarantine, and watcher setup while preserving root inputs and settling probes before scientific spawn.
+
+#### Scenario: A reserved processing run prepares project artifacts
+
+- **WHEN** native preparation precedes worker execution
+- **THEN** participant precedence, executor namespaces, compatibility, version capture, and renderer independence SHALL follow these rules:
+
 Native processing SHALL verify BIDS compatibility before mutation and own participant merging, configuration installation, environment capture, historical selected-status/log quarantine, project-wide stale-lock quarantine, and watcher startup. Participant generation SHALL preserve existing root-authored site values, extra columns, ASL run normalization, and correction rules. Root `participants.tsv` and `participants.json` SHALL be read-only inputs, excluded from journal mutation, backup, quarantine and restore targets. Only derivative participant files SHALL be installed. BIDS root TSV site values SHALL take precedence over group fallback, including when correction is disabled; DICOM SHALL preserve its existing no-root-read behavior. BIDS compatibility verification SHALL require existing valid setup and offer separate explicit repair preflight on conflict, never processing-time repair. BIDS configuration SHALL use the current root in the executor's filesystem namespace in `x.opts.subjectFolder`: the absolute host root for MATLAB, or the existing `/data` binding for Apptainer; DICOM SHALL omit that field for either profile. Assembly SHALL replace or remove any supplied value without mutating the reserved configuration or host project identity. Native version capture SHALL preserve `unknown` fallback when a failed probe has settled, overlap independent preparation, and settle before scientific launch. A timed-out or otherwise unsettled probe SHALL fail preparation and settle its in-process process scope before terminal publication; it SHALL NOT permit scientific launch with unresolved probe ownership. Renderer subscriptions SHALL NOT be a prerequisite for safe launch or completion.
 
 #### Scenario: BIDS verification fails
@@ -253,6 +295,13 @@ Native processing SHALL verify BIDS compatibility before mutation and own partic
 - **THEN** native rollback SHALL restore prior GUI-owned files and prior absence after resources settle
 
 ### Requirement: Durable processing execution boundary
+
+Processing SHALL journal destructive preparation before mutation and persist execution commit before worker execution, restoring proven GUI state only pre-commit and preserving scientific state afterward under the existing worker-launch contract.
+
+#### Scenario: Preparation, execution commit, or launch recovery occurs
+
+- **WHEN** reserved processing crosses its durable execution boundary
+- **THEN** quarantine scope, recovery, validation, worker limits, and private supervision SHALL follow these rules:
 
 Processing SHALL persist validated destination-to-backup mappings before destructive mutation and persist execution commit before a worker can execute. Before execution commit, recovery SHALL restore the exact prior GUI-owned artifact state after current in-process settlement or explicit interrupted-run confirmation. After execution commit, failure or cancellation SHALL stop owned process scopes and preserve current ExploreASL artifacts without restoring historical statuses or configuration. Scientific outputs SHALL never be deleted or restored by launch recovery. Malformed records and unmapped legacy quarantine SHALL block affected launch without inferred destination mapping. Native preparation SHALL retain selected module/subject scope for individual historical `.status` files and module logs, optional BIDS2Legacy rerun behavior, unchanged non-log files in the log directory, and unchanged scientific module ordering. Stale `locked` directories SHALL be collected across the entire project's ExploreASL lock root before module/subject filters; safe allowlisted destinations SHALL be quarantined through the same validated journal mappings and pre/post-commit recovery policy. Unsupported destinations and `locked` entries that are symbolic links or not directories SHALL reject preparation. Native launch SHALL validate the profile and require a positive `u32` worker count; it SHALL NOT impose a CPU-core maximum or Population-only single-worker rule. Those worker limits SHALL remain renderer preflight rules. Native launch SHALL invoke MATLAB/Apptainer using the reserved worker count, existing profile arguments, worker numbering and staggering; live process identity SHALL remain private to in-process supervision.
 
@@ -289,6 +338,13 @@ Processing SHALL persist validated destination-to-backup mappings before destruc
 
 ### Requirement: Expected-target native processing completion
 
+Native completion SHALL require fresh safe ready evidence for every immutable expected target and successful exits for every requested worker, independent of unrelated statuses or watcher progress.
+
+#### Scenario: Native processing audits terminal target evidence
+
+- **WHEN** all requested workers have exited and completion is evaluated
+- **THEN** target granularity, freshness, quarantine, and filesystem authority SHALL follow these rules:
+
 Native completion SHALL use the immutable target set: Structural per Subject/Session, ASL per Subject/Session/Run, and Population per dataset. It SHALL require safe fresh regular `999_ready.status` files for every expected target and successful exit evidence for every requested worker. Selected historical statuses SHALL be quarantined before execution. Unrelated historical or extra targets SHALL NOT determine current outcome. Watcher notifications SHALL provide progress only; the final filesystem audit SHALL determine target evidence.
 
 #### Scenario: Missing selected target
@@ -307,6 +363,13 @@ Native completion SHALL use the immutable target set: Structural per Subject/Ses
 - **THEN** that historical module SHALL NOT prevent current-run completion
 
 ### Requirement: Compact acknowledged request replay
+
+Processing SHALL retain one durable full current record until exact acknowledgement, cleanup, and bounded historical bindings are durable, preserving direct original-identity replay without historical payload scans or false constant-storage claims.
+
+#### Scenario: Requests are reserved, acknowledged, compacted, or replayed
+
+- **WHEN** current and historical request records change under active-project ownership
+- **THEN** lookup, binding limits, publication order, idempotence, and durability failures SHALL follow these rules:
 
 Admission, discovery and exact acknowledgement SHALL use one fixed full current-run record and direct historical request/run lookup without scanning historical run payloads. Reservation SHALL durably publish that complete fixed record before returning success or journal mutation. No separate current pointer or full historical request payload SHALL be required to discover an interrupted reservation. Unresolved-journal validation SHALL still apply when the current record is absent. Before acknowledgement the full terminal snapshot SHALL remain durable and replayable. After acknowledgement each request SHALL retain an indefinitely preserved binding no larger than 4 KiB plus small direct-lookup entries, containing canonical payload digest, project/request/run identity, exact terminal revision, outcome, fixed-field bounded summary and acknowledgement. It SHALL NOT retain full profiles, configuration, participant inputs, per-target arrays or full worker history. Storage therefore grows by at most 4 KiB logical binding bytes plus lookup/filesystem overhead per acknowledged request; total lifetime storage SHALL NOT be described as constant or fully bounded.
 
@@ -332,6 +395,13 @@ Compaction SHALL durably acknowledge the fixed terminal current record, publish 
 
 ### Requirement: Durable processing terminal replay
 
+Native processing SHALL own immutable terminal outcomes and increasing lifecycle revisions, persisting settled evidence for exact save-before-acknowledgement replay while retaining interruption and cleanup ownership on failure.
+
+#### Scenario: Processing stops, settles, reopens, or reconciles terminal state
+
+- **WHEN** lifecycle and resource ownership change for an admitted run
+- **THEN** persistence, cancellation precedence, settlement, errors, and provenance SHALL follow these rules:
+
 Native processing SHALL persist lifecycle revision, logical worker exits, target outcomes, structured error, recovery action, and terminal summary. Completed, Failed, and Cancelled snapshots SHALL follow supported process-scope and watcher settlement. Interrupted snapshots discovered after native restart SHALL instead disclose absent in-process ownership and require external-stop confirmation before cleanup, acknowledgement, or replacement execution. Discovery SHALL return active or unacknowledged terminal state. Exact run/revision acknowledgement SHALL be durable and idempotent, and SHALL occur only after corresponding project metadata is saved. Cleanup failures SHALL retain ownership with retryCleanup. Admitted operational failures SHALL return structured snapshots; storage failures SHALL NOT be disguised as persisted terminal success. Only native lifecycle ownership SHALL transition Preparing, Running, Finalizing and Cancelling; terminal lifecycle outcomes SHALL be immutable. Exact stale callbacks SHALL NOT mutate another run. Stop SHALL persist cancellation intent and publish Cancelling before waiting; admitted user cancellation SHALL take precedence over completion. Project shutdown with no owned resources SHALL succeed; failed settlement SHALL retain actionable ownership and block transition. Snapshots SHALL include accepted Population execution-commit/completion and native version/ready-mtime provenance, without requiring renderer filesystem probes.
 
 #### Scenario: Renderer disappears during finalization
@@ -355,6 +425,13 @@ Native processing SHALL persist lifecycle revision, logical worker exits, target
 - **THEN** native terminal authority SHALL remain available for replay
 
 ### Requirement: Exact interrupted-run confirmation
+
+Ownerless active processing SHALL persist Interrupted and require exact run/revision external-stop confirmation before pre/post-commit recovery and ordered terminal acknowledgement, without accepting persisted process identities.
+
+#### Scenario: Reopened processing requires external-stop confirmation
+
+- **WHEN** activation finds a nonterminal record without its matching supervisor
+- **THEN** preserved artifacts, admission blocking, confirmation, and recovery SHALL follow these rules:
 
 When activation finds a nonterminal processing record without its matching in-process supervisor, native processing SHALL persist Interrupted with `availableAction: confirmStopped`. It SHALL preserve the launch journal and all current ExploreASL/scientific artifacts, allow project viewing, and block import/processing admission. `confirm_processing_workers_stopped` SHALL accept only the exact current run and revision, SHALL NOT accept or signal a PID/PGID, and SHALL reject stale or foreign confirmation.
 

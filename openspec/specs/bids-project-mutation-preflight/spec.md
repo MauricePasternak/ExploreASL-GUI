@@ -8,6 +8,13 @@ Define read-only planning, explicit consent, and recoverable transactional appli
 
 ### Requirement: BIDS mutation preflight is read-only
 
+Setup preflight SHALL remain read-only and require reviewed plans for detected BIDS roots, while separately disclosing prior-transaction recovery and preserving the ordinary non-BIDS DICOM creation exception.
+
+#### Scenario: A selected root enters setup inspection and preflight
+
+- **WHEN** a root is selected, inspected, or reviewed for project setup
+- **THEN** plan admission, read-only inspection, and prior-recovery handling SHALL follow these rules:
+
 The landing setup dialog SHALL require a mutation plan for either data source when detection reports `is_bids = true`, `total_subject_count > 0`, `has_dataset_description = true`, or non-null `dataset_desc_error`. Ordinary DICOM creation with none of these indicators SHALL use the normal single-project-file creation path after explicit dialog confirmation, without mutation preflight or a plan identity. Activation, Recent Projects registration, and navigation SHALL still wait for successful project creation. The plan and transaction requirements below apply whenever reviewed setup is used; BIDS-direct creation SHALL NOT use the direct-create exception.
 
 Scanning a candidate root, building/displaying a new mutation plan, changing import mode, and cancelling that plan SHALL not create, modify, rename, or remove source-tree entries. A previously confirmed unfinished setup transaction SHALL be diagnosed separately on root selection and recovered under its validated journal before new preflight begins. That recovery SHALL be disclosed and SHALL not authorize new setup mutations. A clean selected root SHALL remain byte-preserving throughout selection and preflight. Inspection errors SHALL report actionable failure without setup/cleanup writes.
@@ -33,6 +40,13 @@ Scanning a candidate root, building/displaying a new mutation plan, changing imp
 - **THEN** it SHALL fail without changing source entries
 
 ### Requirement: Plan discloses exact durable mutations
+
+Setup plans SHALL disclose ordered durable operations, exact GUI-owned text bytes, project identity, and temporary artifacts, with accessible technical details and always-visible warnings and conflicts.
+
+#### Scenario: A setup or repair plan is presented for confirmation
+
+- **WHEN** a mutation plan is displayed or its technical disclosure is collapsed
+- **THEN** plan contents, operation order, and visible safeguards SHALL satisfy this contract:
 
 The preflight result SHALL identify the canonical selected root, selected data source, an opaque plan identity, warnings, conflicts, and every durable project-relative operation as `create`, `update`, or `no-op`. Operations SHALL be listed in execution order: `rawdata/`, `.bidsignore`, then `project.easl`, omitting paths not applicable to the selected mode. Existing entries marked `no-op` SHALL retain their position in that sequence. Both project creation and setup repair dialogs SHALL preserve this order. For a BIDS-direct project, the operation list SHALL cover these three paths; it SHALL state that `rawdata/README.md` is preserved. For DICOM import selected on a detected BIDS root, the list SHALL cover the applicable ignore-file and project operations and SHALL omit BIDS-direct-only compatibility artifacts. Any internal candidate, backup, or journal entries used during commit SHALL be identified separately as temporary transaction artifacts that are removed after commit or recovery.
 
@@ -65,6 +79,13 @@ BIDS-direct setup and later verification SHALL NOT create, modify, rename, or re
 - **THEN** its bytes, metadata-independent content hash, and path SHALL remain unchanged after commit
 
 ### Requirement: BIDS ignore output is deterministic
+
+Ignore-file planning SHALL preserve existing bytes and append only missing required entries in canonical order, respecting existing line endings and retaining byte-identical no-ops.
+
+#### Scenario: Setup plans required ignore entries
+
+- **WHEN** `.bidsignore` is absent, complete, or missing required entries
+- **THEN** planned bytes and no-op classification SHALL follow these rules:
 
 For BIDS-direct and repair, the required ignore entries SHALL be `project.easl`, `.easl_staging`, and `rawdata/`, in that canonical append order. Reviewed DICOM setup requires only the first two. Entry matching SHALL compare trimmed logical lines. If `.bidsignore` is absent for BIDS-direct or repair, the planned bytes SHALL be exactly `project.easl\n.easl_staging\nrawdata/\n`. If all required entries exist, the file SHALL be a byte-preserving `no-op` even when spacing, ordering, duplicates, final-newline state, or CRLF differs.
 
@@ -115,6 +136,13 @@ Applying a setup plan SHALL require an explicit confirmation carrying the curren
 - **THEN** the second submission SHALL return the original committed result and SHALL create no duplicate lines or transaction artifacts
 
 ### Requirement: Confirmed mutations are recoverable as one transaction
+
+Confirmed setup SHALL commit as one durable, recoverable root-local transaction, restoring prior state on ordinary failure and blocking ambiguous interrupted recovery without scanning unrelated roots.
+
+#### Scenario: Reviewed setup commits or requires recovery
+
+- **WHEN** setup changes are committed, fail, or are found interrupted on root selection
+- **THEN** journaling, installation, rollback, and recovery SHALL satisfy these guarantees:
 
 Commit SHALL treat applicable project, compatibility directory, and ignore-file changes as one reviewed transaction. Before exposing entries or replacing files, a durable root-local journal SHALL record transaction identity, owned paths, expected content, and before-state sufficient for safe rollback. New content SHALL validate and flush before installation; replacement SHALL use same-directory atomic candidates. Success SHALL require all planned entries and supported directory flushing to complete.
 

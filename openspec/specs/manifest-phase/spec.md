@@ -8,6 +8,13 @@ Define the manifest workflow steps for QC review and export.
 
 ### Requirement: Manifest Phase Stepper Structure
 
+Manifest SHALL include Verdict Resolution only when multiple reviewers disagree, requiring all disagreements to resolve before Preview & Export.
+
+#### Scenario: Reviewer mode and disagreements determine manifest steps
+
+- **WHEN** the Manifest stepper is constructed
+- **THEN** step count, order, and resolution gating SHALL follow these cases:
+
 The Manifest phase SHALL render a stepper whose step count depends on reviewer mode and presence of disagreements:
 
 - **Single-reviewer mode** (`reviewers.length <= 1` or `reviewers` is `undefined`): exactly 2 steps, QC Selection and Preview & Export.
@@ -37,6 +44,13 @@ The Verdict Resolution step SHALL be omitted entirely when reviewers are unanimo
 - **THEN** Step 1 (Verdict Resolution) SHALL be enabled, and clicking "Next" from Step 0 SHALL advance to Verdict Resolution
 
 ### Requirement: Manifest Phase Access Gate
+
+Manifest access SHALL follow native cursor and Population eligibility, while separate active-processing guards disable and redirect navigation regardless of saved access.
+
+#### Scenario: A project evaluates Manifest navigation
+
+- **WHEN** native eligibility and active processing state are projected
+- **THEN** restored-phase access, later-phase readiness, and route guards SHALL follow these rules:
 
 `canAccessPhase` SHALL determine Manifest access by membership in the native snapshot's `allowedPhases`. Native access SHALL include the project's current phase (including a restored saved phase) and all earlier phases; access to Manifest as a later phase SHALL require `project.uiState?.processing?.population?.completed === true`. A saved current Manifest phase SHALL remain allowed even when Population completion is false.
 
@@ -77,6 +91,13 @@ The `PHASE_NAV` array in `src/components/Layout.tsx` SHALL contain a 5th entry w
 - **THEN** `ProjectPage` SHALL redirect to the project's current phase, or to Processing if the current phase is Visualization or Manifest
 
 ### Requirement: Manifest Phase Help Content
+
+Manifest help SHALL remain static and reviewer-independent, explaining QC verdicts, core preview sections, exports, and the Population re-run lock without adding reviewer-management instructions.
+
+#### Scenario: A user opens Manifest help
+
+- **WHEN** the `manifest` help entry is rendered in either reviewer mode
+- **THEN** its location, topics, and warning SHALL satisfy this contract:
 
 The `HELP_DATA` map in `src/components/common/PageHelpButton.tsx` SHALL contain a static, reviewer-independent entry keyed by the `manifest` phase. The help modal SHALL include a title, a goal paragraph describing QC verdict capture and Markdown/HTML export, guidance about Neutral verdicts, the four core preview sections (Study Parameters, Software Manifest, QC Summary, Pipeline Summary), and an explicit warning stating that re-running Population locks the phase until the new run completes. Help content SHALL remain the same for single- and multi-reviewer projects rather than adding mode-specific reviewer-management or resolution guidance.
 

@@ -8,6 +8,13 @@ Define manifest verdict persistence and state management.
 
 ### Requirement: Population Re-run Locks Manifest Phase
 
+Committed Population execution SHALL invalidate its completion prerequisite while separate active-processing guards block Manifest navigation; rejected pre-commit attempts SHALL preserve prerequisites and all reviewer verdicts.
+
+#### Scenario: Population is restarted or preparation fails before commit
+
+- **WHEN** native processing snapshots update Population execution state
+- **THEN** eligibility, navigation guards, prerequisite preservation, and verdict staleness SHALL follow these rules:
+
 An accepted native Population execution-commit snapshot SHALL clear Population completion under the existing `processing-store` contract. Native `allowedPhases`, consumed by `canAccessPhase`, SHALL retain the project's current phase (including a restored saved phase) and earlier phases while requiring Population completion for later Manifest access. Independently, active processing (`preparing`, `running`, `finalizing`, or `cancelling`) SHALL disable Manifest navigation and redirect direct Manifest routes under the `manifest-phase` contract; no separate manifest lockout state SHALL be added. A rejected start or pre-commit preparation failure SHALL preserve prior prerequisite access once processing is inactive. No reviewer verdict SHALL be deleted; all verdict slices persist and become stale only according to prior-module mtimes.
 
 #### Scenario: Re-running Population disables Manifest nav
@@ -21,6 +28,13 @@ An accepted native Population execution-commit snapshot SHALL clear Population c
 - **THEN** all persisted reviewer verdict slices SHALL remain unchanged
 
 ### Requirement: Current manifest configuration
+
+Current manifest configuration SHALL use a validated ordered reviewer registry with indexed verdicts and resolutions, rejecting legacy identities and provenance placement while preserving individual verdict semantics.
+
+#### Scenario: Manifest configuration is accepted or loaded
+
+- **WHEN** current project state contains reviewer and verdict data
+- **THEN** registry constraints, map defaults, legacy rejection, and provenance placement SHALL satisfy this schema:
 
 Current configuration SHALL contain `uiState.manifest` with an ordered registry of one to five reviewers, a registered `activeReviewerId`, reviewer-indexed `verdicts`, and SubjectSession-indexed `resolvedVerdicts`. Verdict and resolution maps SHALL default to empty maps; empty reviewer slices SHALL be valid. Every reviewer SHALL have a unique UUID, a nonempty label of at most 100 Unicode characters, and a UTC creation timestamp. Verdict keys SHALL belong to registered reviewers. Flat verdict maps, missing implicit-reviewer identities, and legacy manifest `lastRunVersions`/`lastPopulationRunMtime` fields SHALL not be accepted. Current Population provenance SHALL remain under `uiState.processing.population.lastRun`. Individual verdict status, reason, notes, and staleness timestamp semantics SHALL remain unchanged.
 
@@ -98,6 +112,13 @@ Verdict edits SHALL allow an explicit registered reviewer ID or default to the r
 - **THEN** the verdict SHALL remain under that reviewer's ID
 
 ### Requirement: Indexed reviewer staleness reference
+
+Verdict staleness SHALL compare captured Structural/ASL completion time with the available current maximum per reviewer, excluding unavailable timestamps and Population-only mtime changes.
+
+#### Scenario: Existing reviewer verdicts are checked for staleness
+
+- **WHEN** QC controls project the active indexed reviewer slice
+- **THEN** capture time, stale classification, and empty-result handling SHALL follow these rules:
 
 A captured verdict's `setAt` SHALL equal the integer maximum Structural/ASL completion mtime, or zero when unavailable. A nonzero `setAt` SHALL be stale when an available current maximum differs; zero or unavailable current mtimes SHALL not be marked stale. Staleness SHALL use a reviewer-indexed result for every reviewer count, including empty reviewer results. QC controls SHALL read only the active slice. Population-only reruns SHALL not make verdicts stale solely because Population's mtime changes.
 

@@ -8,6 +8,13 @@ Define compilation of metadata group assignments into ExploreASL studyPar config
 
 ### Requirement: Generate Specially Grouped Regex Combinations From Subject Assignments
 
+StudyPars compilation SHALL compress assignment-derived groups by losslessly matching sorted deduplicated session sets, preserving literal complete session labels and explicit subject targets.
+
+#### Scenario: Assigned subjects share or differ in session sets
+
+- **WHEN** metadata-group assignments compile into StudyPars blocks
+- **THEN** deduplication, grouping signatures, and generated regex targets SHALL follow these rules:
+
 The system SHALL aggregate the `subjectRows` assignments for every `MetadataGroup` into discrete `StudyPars` blocks designed exclusively via target subject strings. Within each group, the compiler SHALL sort each subject's deduplicated session list and group subjects with identical session sets using a lossless signature. It SHALL preserve complete session labels when generating the joined `VisitRegExp` and join the subject names in `SubjectRegExp`. Session labels containing commas SHALL remain literal labels and SHALL NOT collide with multi-session signatures.
 
 #### Scenario: Aggregating subjects with matching session profiles
@@ -37,6 +44,13 @@ The system SHALL aggregate the `subjectRows` assignments for every `MetadataGrou
 
 ### Requirement: Match final staging identifiers
 
+Compilation SHALL apply session aliases before compression and escaping, preserve final subject identities and explicit metadata, and use identical aliases across preview, validation, and execution.
+
+#### Scenario: Assigned rows compile against final staging labels
+
+- **WHEN** session aliases and already-final subject rows generate StudyPars
+- **THEN** transformation order, preserved identities, and shared execution semantics SHALL follow these rules:
+
 The compiler SHALL apply the supplied session aliases to captured `subjectRows` sessions before deduplication, session-set compression, and regex escaping. `VisitRegExp` SHALL target complete staged BIDS session labels (ExploreASL Visits). Row subjects already contain final subject labels and SHALL NOT have subject renames reapplied. Compilation SHALL preserve persisted row identities and group assignments and explicit metadata values including `false` and `0`. Preview, validation, and execution SHALL compile with the same session aliases.
 
 #### Scenario: Session aliases retain group-specific metadata
@@ -59,6 +73,13 @@ The `assembleStudyPar` function SHALL accept both `metadataGroups: MetadataGroup
 - **THEN** it SHALL require `subjectRows` as a second argument and SHALL use `subjectRows` to determine which subjects and sessions belong to each `groupId`.
 
 ### Requirement: Explicit Assignment Targets and Invalid Empty Placeholder
+
+Assignment-derived blocks SHALL use explicit targets; an empty assignment placeholder SHALL fail required-metadata validation rather than become a valid catch-all or authorize execution.
+
+#### Scenario: No rows belong to any supplied metadata group
+
+- **WHEN** `assembleStudyPar` compiles assignment targets
+- **THEN** empty output and execution gating SHALL follow these rules:
 
 The compilation engine SHALL output explicit target regexes for assignment-derived blocks, indicating group membership derived exclusively from `subjectRows`. If no rows belong to any supplied metadata group, `assembleStudyPar` SHALL instead return `{ "StudyPars": [{}] }` as an empty placeholder. `StudyParJsonSchema` SHALL reject this placeholder for missing required metadata; it SHALL NOT constitute a valid catch-all or valid studyPar configuration, and studyPar validation SHALL block entry to execution.
 

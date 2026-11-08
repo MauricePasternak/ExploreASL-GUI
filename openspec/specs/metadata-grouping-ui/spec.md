@@ -44,6 +44,13 @@ The component SHALL NOT build or set regex strings when creating override groups
 
 ### Requirement: MetadataGroupSchema and DerivedMetadataGroupSchema
 
+Derived review groups SHALL extend the unchanged persisted metadata-group schema with acquisition display fields and subject/session membership, projecting back to the base schema on confirmation.
+
+#### Scenario: Scanned groups enter review and are later persisted
+
+- **WHEN** the import store or BIDS panel consumes derived metadata groups
+- **THEN** derived fields and persistence projection SHALL satisfy this schema:
+
 The existing `MetadataGroupSchema` (`{ id: string, label: string, bidsParams: BidsAslMetadataBaseSchema }`) is preserved unchanged.
 
 `DerivedMetadataGroupSchema` SHALL be added, extending `MetadataGroupSchema`:
@@ -110,6 +117,13 @@ export type DerivedMetadataGroup = z.infer<typeof DerivedMetadataGroupSchema>;
 - **THEN** transform returns `undefined`; native vendor derivation falls back to `"UnknownVendor"`
 
 ### Requirement: summarizeAslContext helper
+
+`summarizeAslContext` SHALL compact adjacent repeated tokens and alternating label/control pairs for review and manifest display while preserving raw persisted context.
+
+#### Scenario: Raw ASL context is summarized for display
+
+- **WHEN** review or manifest renders empty or comma-separated context
+- **THEN** token grouping, repetition formatting, and raw-value preservation SHALL follow these rules:
 
 `src/lib/bids/sidecar.ts` SHALL export `summarizeAslContext(raw: string | undefined): string`:
 

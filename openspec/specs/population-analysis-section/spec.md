@@ -8,6 +8,13 @@ Define requirements and scenarios for the dedicated Population Analysis layout s
 
 ### Requirement: Population Analysis Section Layout
 
+Processing SHALL show a dedicated Population Analysis card after configuration only in idle or terminal phases, allowing interrupted-state edits without releasing native execution-admission gates.
+
+#### Scenario: Population configuration visibility follows lifecycle
+
+- **WHEN** the Processing page renders idle, active, or interrupted state
+- **THEN** section placement, visibility, and editing boundaries SHALL follow these rules:
+
 A dedicated Population Analysis section SHALL be rendered on the Processing page after the Pipeline Configuration Panel. The section SHALL be a Card with a title "Population Analysis". It SHALL only be visible when the processing phase is `idle`, `completed`, `failed`, `cancelled`, or `interrupted` (same visibility as the config view). Interrupted-run configuration SHALL remain editable subject to the normal module and eligibility constraints; editing SHALL NOT release the native external-stop confirmation or acknowledgement gate for starting another run.
 
 #### Scenario: Section appears in correct position
@@ -27,6 +34,13 @@ A dedicated Population Analysis section SHALL be rendered on the Processing page
 - **AND** another run SHALL remain blocked until the required native confirmation and acknowledgement complete
 
 ### Requirement: Population Module Checkbox
+
+Population selection SHALL require independent module execution and at least one eligible subject/session, applying its specified Structural and any-run ASL predicate rather than an all-run aggregate.
+
+#### Scenario: Population eligibility or module selection changes
+
+- **WHEN** the Population checkbox evaluates available statuses and selected modules
+- **THEN** disabled state, effective predicate, and explanatory tooltips SHALL follow these rules:
 
 The Population Analysis section SHALL contain a checkbox labeled "Enable population analysis". The checkbox SHALL be disabled when either Structural or ASL is selected in the Pipeline Configuration Panel, or when no available subject/session has a Structural row with status `complete` and at least one ASL row with status `complete` or `outdated`. Structural `outdated` SHALL NOT satisfy this predicate. The ASL check SHALL NOT require every run to be complete and SHALL NOT use the aggregate all-run status rule. When disabled, a tooltip SHALL explain the unmet constraint(s). If Structural or ASL is selected, the tooltip SHALL read: "Population must run independently. Deselect Structural and ASL modules to enable." If no subject/sessions are eligible, the tooltip SHALL read: "At least one subject/session must have both Structural and ASL complete." If both constraints are unmet, both messages SHALL be joined. This explanatory copy SHALL NOT redefine the effective eligibility predicate.
 

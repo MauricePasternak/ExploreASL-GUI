@@ -8,6 +8,13 @@ Define QC verdict selection for manifest subjects and reviewers.
 
 ### Requirement: QcSelection Table Shape
 
+QC Selection SHALL present subject/session status, group, verdict, and available artifact controls without processing selection controls, using active reviewer slices and explicit missing-artifact labels.
+
+#### Scenario: QC Selection displays inventory for the active reviewer
+
+- **WHEN** the QC table renders one or multiple reviewers' available subject-sessions
+- **THEN** columns, artifacts, reviewer tabs, and Ungrouped labels SHALL follow these rules:
+
 QC Selection SHALL retain Subject/Session columns, read-only Structural/ASL statuses, metadata group labels, and Neutral/Pass/Fail controls without processing row-selection controls. Structural and ASL columns SHALL expose available Logs/Errors and Report badges that open the existing log and report viewers; unavailable artifacts SHALL show No Logs or No Report, and skipped modules SHALL omit those artifact controls. Outdated reports SHALL be labeled View Outdated Report. With multiple reviewers it SHALL render labeled tabs scoped to the active reviewer. With one reviewer it SHALL render the same table without tabs, reading the sole registered reviewer's indexed slice. A missing or unmatched group assignment SHALL show "Ungrouped".
 
 #### Scenario: Row shows metadata group label

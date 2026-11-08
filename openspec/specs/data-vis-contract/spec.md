@@ -8,6 +8,13 @@ Define the data contracts and commands for loading, typing, and fetching populat
 
 ### Requirement: Stats File Listing Command
 
+`list_stats_files` SHALL return sorted metadata for supported Stats TSV prefixes, excluding unrelated files and treating a missing Stats directory as empty.
+
+#### Scenario: Population Stats files are enumerated
+
+- **WHEN** `list_stats_files` inspects the project's Stats directory
+- **THEN** matching, ordering, response fields, and missing-directory handling SHALL follow these rules:
+
 A Rust command `list_stats_files` SHALL accept `projectRoot: String` and return an array of `{ fileName: string, relativePath: string, size: number, modified: string }` for `.tsv` files whose names start with `mean_`, `median_`, or `CoV_` in `<project_root>/derivatives/ExploreASL/Population/Stats/`. Matching SHALL be case-sensitive, results SHALL be sorted by filename, and `relativePath` SHALL be the filename relative to the Stats directory. Non-TSV files and other TSV prefixes SHALL be excluded. The command SHALL return an empty array if the Stats directory does not exist (not an error).
 
 #### Scenario: Stats directory with mixed files
@@ -21,6 +28,13 @@ A Rust command `list_stats_files` SHALL accept `projectRoot: String` and return 
 - **THEN** the command SHALL return an empty array (not an error)
 
 ### Requirement: qCBF Data Loading Command
+
+`load_qcbf_data` SHALL parse and cache qCBF TSV data, returning typed inspection metadata, content hashes, and correctly translated participant/session/run identifiers.
+
+#### Scenario: A qCBF Stats file is loaded
+
+- **WHEN** `load_qcbf_data` receives a project root and relative file path
+- **THEN** parsing, units, hashes, identifiers, and cache population SHALL satisfy this contract:
 
 A Rust command `load_qcbf_data` SHALL accept `projectRoot: String` and `relativePath: String` and return a `DataInspection` object containing: `columns` (array of `{ name, originalName, source, units, inferredType, levels, isIdentifier }`), `rowCount` (excluding the units row), `qcbfRowCount` (matching `rowCount`), `qcbfHash` (SHA-256 hex string after stripping a leading UTF-8 BOM), and `externalHash` (always `null` for qCBF-only load). The command SHALL parse the TSV, build column metadata with `source: "qcbf"` and `originalName` equal to `name` (no suffixes in qCBF-only mode), and cache the parsed data in `AppState.active_data`. The command SHALL skip the second row (units row) if detected. When present, `participant_id` SHALL produce Subject and Session identifiers, and the TSV `session` column SHALL map to Run. Present identifier columns SHALL have `isIdentifier: true`. Type inference SHALL classify columns as `"continuous"`, `"ordinal"`, or `"nominal"` (never `"excluded"` — that is user-only).
 
@@ -55,6 +69,13 @@ A Rust command `load_qcbf_data` SHALL accept `projectRoot: String` and `relative
 - **THEN** the `inferredType` SHALL be `"nominal"` and `levels` SHALL contain unique non-missing values in file encounter order; qCBF `LongitudinalTimePoint` SHALL instead be inferred as `"ordinal"`
 
 ### Requirement: Data Column Read Command
+
+`read_data_columns` SHALL return requested string-valued columns and available identifiers exclusively from the active in-memory cache, omitting absent fields.
+
+#### Scenario: Visualization requests cached columns
+
+- **WHEN** `read_data_columns` receives requested column names
+- **THEN** returned rows and the no-file-I/O boundary SHALL satisfy these rules:
 
 A Rust command `read_data_columns` SHALL accept `projectRoot: String` and `columnNames: Vec<String>` and return an array of row objects from the `AppState.active_data` cache. Each row SHALL include any present `participant_id`, `subject`, `session`, and `run` fields regardless of `columnNames`, and any present requested columns as string values. Absent fields SHALL be omitted. The command SHALL NOT perform file I/O — it reads exclusively from the in-memory cache. Numeric parsing is the frontend's responsibility.
 
@@ -104,6 +125,13 @@ The setup stepper's first step SHALL present a dropdown of available TSV files f
 
 ### Requirement: Column Type System
 
+Column typing SHALL support continuous, ordinal, nominal, and user-only excluded types, with specified identifier and fixed-column restrictions controlling axis availability.
+
+#### Scenario: Inferred column types are presented for editing
+
+- **WHEN** loaded or joined columns enter the typing table
+- **THEN** inference, dropdown restrictions, and axis eligibility SHALL follow these rules:
+
 Each column SHALL have a type of `"continuous"`, `"ordinal"`, `"nominal"`, or `"excluded"`. Auto-inference (from `load_qcbf_data` or `execute_join`) SHALL assign only `"continuous"`, `"ordinal"`, or `"nominal"`. The typing table SHALL omit raw `participant_id`. Dropdowns for columns named `subject`, `session`, or `run` SHALL offer only `"nominal"` and `"ordinal"`. Dropdowns SHALL be disabled for names `GM_vol`, `WM_vol`, `CSF_vol`, `GM_ICVRatio`, `GMWM_ICVRatio`, `MeanMotion`, `SubjectNList`, or names ending in `_L`, `_R`, or `_B`; this restriction SHALL apply by displayed column name, regardless of source. Other displayed columns SHALL offer all four types. The `"excluded"` type SHALL only be assignable by user action — auto-inference SHALL NEVER assign `"excluded"`. Excluded columns SHALL NOT be available for axis assignment; chart column requests SHALL follow those assignments rather than imposing a backend exclusion filter.
 
 #### Scenario: Auto-inferred type displayed
@@ -133,6 +161,13 @@ Each column SHALL have a type of `"continuous"`, `"ordinal"`, `"nominal"`, or `"
 
 ### Requirement: Identifier Column Flagging
 
+qCBF identifiers SHALL preserve raw participant identity and translate ExploreASL Visit/Session into GUI Session/Run, remaining usable for plotting and image lookup; external columns SHALL not become identifiers.
+
+#### Scenario: qCBF and external columns receive identifier metadata
+
+- **WHEN** column metadata is built for visualization
+- **THEN** identifier derivation, flags, sources, and image lookup SHALL follow these rules:
+
 The `participant_id` column SHALL be split into `subject` (nominal, isIdentifier) and `session` (nominal, isIdentifier, parsed from participant_id — GUI Session). The TSV `session` column SHALL be mapped to `run` (nominal, isIdentifier — GUI Run). The raw `participant_id` column SHALL also have `isIdentifier: true` as it is the direct key for qCBF filename construction. Identifier columns SHALL be available as categorical columns for plotting (e.g. swarmplot X-axis) and SHALL serve as the lookup key for qCBF image loading on point click. Identifier columns SHALL have `source: "qcbf"` — column from external datas SHALL always have `isIdentifier: false`.
 
 #### Scenario: Subject column available for plotting
@@ -151,6 +186,13 @@ The `participant_id` column SHALL be split into `subject` (nominal, isIdentifier
 - **THEN** these columns SHALL have `isIdentifier: false` and `source: "external"`
 
 ### Requirement: Level Ordering
+
+Level ordering SHALL edit persisted nominal and ordinal non-identifier levels without changing chart encounter ordering or implying statistical relationships.
+
+#### Scenario: Categorical levels are displayed or reordered
+
+- **WHEN** the user enters Level Ordering or changes a column type
+- **THEN** available levels, persistence, and chart independence SHALL follow these rules:
 
 The Level Ordering step SHALL list non-identifier columns whose saved type is ordinal or nominal. Without a saved ordering, it SHALL display inspection levels in file encounter order for both types. Up/down controls SHALL persist edits in `levelOrderings`. Type changes SHALL NOT discover new levels. Saved ordering SHALL affect the ordering editor only: current swarmplot groups SHALL use encounter order in the filtered chart rows and SHALL NOT read `levelOrderings`. Reordering SHALL NOT imply statistical relationships or trend lines.
 
@@ -181,6 +223,13 @@ The Level Ordering step SHALL list non-identifier columns whose saved type is or
 
 ### Requirement: Column Typing Table Layout
 
+The column typing table SHALL show all inspected columns except raw participant ID, with identifiers first and separate controls for type, metadata, and level ordering.
+
+#### Scenario: Inspection columns are rendered in the typing step
+
+- **WHEN** the Column Types table is displayed
+- **THEN** row order, badges, information, and level-editing placement SHALL follow these rules:
+
 The column typing step SHALL render a table without pagination, with one row per inspection column except raw `participant_id`. Columns named `subject`, `session`, and `run` SHALL appear first in that order. Each row SHALL show its name, restricted type dropdown, identifier badge when applicable, and source badge when a join is configured. The Info cell SHALL show units when present and the existing level count for non-continuous columns with levels. Level editing SHALL be provided separately in the conditional Level Ordering step, not inline in the table.
 
 #### Scenario: Table omits raw participant identifier
@@ -205,6 +254,13 @@ The column typing step SHALL render a table without pagination, with one row per
 
 ### Requirement: Contract Persistence
 
+Visualization setup SHALL persist its singular qCBF source, optional join configuration, typing, identifiers, level ordering, axes, filters, stage, and drawer state under `uiState.dataVis`.
+
+#### Scenario: Visualization setup is saved to the project
+
+- **WHEN** the data contract is persisted
+- **THEN** its fields and nullable source shapes SHALL satisfy this schema:
+
 The data contract SHALL persist to `uiState.dataVis` in the `.easl` project file. The persisted shape SHALL include: `qcbfSource` (`{ relativePath, fileHash }` or `null`, singular — replaces former `contractSources` array), `joinConfig` (`{ externalSource, keys, dropRightOn, naTokens, delimiter }` or `null` — where `externalSource` carries `{ absolutePath, fileHash, sheetName }`), `columnTypes` (record of column name to type), `identifiers` (object with `subject`, `session`, `run` column names), `levelOrderings` (record of column name to ordered levels array), `axisAssignment` (object with `x`, `y`, `colorBy`), `domainFilters` (object with `xMin`, `xMax`, `yMin`, `yMax`), `stage` (one of `"selectData"`, `"columnTypes"`, `"levelOrdering"`, `"visualize"`), and `filtersExpanded` (boolean controlling the Visualization Settings drawer).
 
 #### Scenario: Contract saved after file selection
@@ -228,6 +284,13 @@ The data contract SHALL persist to `uiState.dataVis` in the `.easl` project file
 - **THEN** `joinConfig` SHALL persist with `externalSource` (containing `absolutePath`, `fileHash`, `sheetName`), `keys` (array of `{ left, right }` objects), `dropRightOn`, `naTokens`, and `delimiter`
 
 ### Requirement: Contract Hash-Based Invalidation
+
+Source validation SHALL preserve setup for matching content, invalidate changed qCBF contracts, and require confirmed adoption of changed external content while retaining saved configuration for unavailable external sources.
+
+#### Scenario: Saved visualization sources are validated or replaced
+
+- **WHEN** the page activates or the user relinks an external source
+- **THEN** hashes, warnings, reset scope, cancellation, and autosave SHALL follow these rules:
 
 The qCBF source SHALL retain its SHA-256 hash and project-relative path. On page activation without a join, matching content SHALL preserve setup; changed content SHALL reset column types, level orderings, axes, and stage with "Data file has changed. Please reconfigure." Missing qCBF content SHALL invalidate its contract with "File '{filename}' no longer exists."
 
@@ -294,6 +357,13 @@ Mount-time joined-data validation SHALL inspect both sources. Missing/unreadable
 - **THEN** the saved join SHALL remain available for relinking while Select Data Next is disabled
 
 ### Requirement: Missing Data Handling in Type Inference
+
+Metadata inference and chart checks SHALL use fixed missing-value rules independently of configurable external join normalization, retaining qCBF-specific type behavior.
+
+#### Scenario: Missing values enter inspection, joining, or plotting
+
+- **WHEN** column types or chart values are evaluated
+- **THEN** fixed tokens, all-missing columns, and configured join tokens SHALL follow these rules:
 
 Generic metadata inference for qCBF and external data SHALL treat empty strings, `NaN`, `NA`, and `n/a` (case-insensitive) as missing. With at least one non-missing value, it SHALL classify a column as `"continuous"` if all such values parse as floating-point numbers, otherwise as `"nominal"`; all-missing columns SHALL be nominal. qCBF-specific type rules SHALL still apply. Configured `naTokens` SHALL normalize external row values to empty strings during join parsing, but SHALL NOT alter external preview or joined metadata inference, which uses the raw external inspection. Frontend chart missing-value checks SHALL use the fixed empty/`NaN`/`NA`/`n/a` rules on returned rows, so normalized empty cells SHALL be excluded from axes or grouped as Unknown for color-by. No additional sentinel detection SHALL be performed.
 

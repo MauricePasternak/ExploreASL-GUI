@@ -17,6 +17,13 @@ Application command registration and TypeScript binding generation SHALL use the
 
 ### Requirement: Structured typed application errors
 
+Fallible commands SHALL return generated typed success/error results with structured domain data and human-facing message/details, retaining original diagnostics in existing logs without exposing arbitrary error chains as user copy.
+
+#### Scenario: A native application command fails
+
+- **WHEN** an internal or external-tool failure crosses the typed IPC boundary
+- **THEN** result shape, known-cause guidance, diagnostics, and existing safety behavior SHALL follow these rules:
+
 Fallible application commands SHALL expose a discriminated success/error result in generated frontend bindings. Application errors SHALL include string `message` and `details` fields. Existing domain information, including storage categories and import validation issues, SHALL remain structured and available to callers. Error handling SHALL preserve existing save, recovery, and execution safety behavior. Existing command tracing logs some arguments, including project paths and subject/session identifiers.
 
 Both fields SHALL be human-facing: `message` SHALL concisely describe the failed operation; `details` SHALL explain a known cause or useful next steps. When no reliable explanation exists, `details` SHALL be empty rather than invent a cause or expose arbitrary diagnostics. Original developer diagnostics, including error chains and external tool output, SHALL be retained through the existing application logger before human-facing conversion, subject to its existing limits. Internal `anyhow` errors MAY remain; their context chains SHALL NOT automatically become user-facing copy.
@@ -33,6 +40,13 @@ Both fields SHALL be human-facing: `message` SHALL concisely describe the failed
 
 ### Requirement: Persistent error notifications
 
+Shared operation-specific error notifications SHALL persist until dismissal or exit and update repeated failures with priority within the existing bounded visible queue, leaving other notification lifetimes unchanged.
+
+#### Scenario: An operation fails repeatedly across navigation
+
+- **WHEN** the error presenter receives a project- or profile-scoped failure
+- **THEN** identity, lifetime, content updates, and queue behavior SHALL follow these rules:
+
 User-facing error notifications SHALL use a shared presenter with concise, operation-specific copy. Error notifications SHALL remain until explicitly dismissed or the application exits, including across navigation. Success, information, warning, and progress notification lifetimes SHALL remain unchanged. Repeated failures for the same operation and affected project or profile SHALL update the existing notification with the latest content, including when it is queued or a previous notification was dismissed. The five-visible-notifications-per-position limit SHALL remain; newest errors SHALL receive priority and older notifications SHALL remain in the existing queue rather than be discarded.
 
 #### Scenario: A repeated failure occurs
@@ -46,6 +60,13 @@ User-facing error notifications SHALL use a shared presenter with concise, opera
 - **THEN** the new error SHALL become visible and displaced notifications SHALL remain queued until a visible notification is dismissed
 
 ### Requirement: Human-readable error details
+
+Additional nonempty error explanation SHALL open as selectable sanitized plain text in a root-mounted modal, supporting keyboard dismissal and copying without dismissing or persisting the notification.
+
+#### Scenario: A user opens or copies error details
+
+- **WHEN** an error has additional human-facing explanation
+- **THEN** action visibility, text safety, modal behavior, and clipboard failure handling SHALL follow these rules:
 
 An error notification SHALL offer a "See details" action only when additional nonempty explanation exists. The action SHALL open a root-mounted modal displaying the summary and explanation as readable, selectable plain text with preserved line breaks and scrolling. Terminal escape sequences SHALL be removed; content SHALL NOT be interpreted as HTML or Markdown. The modal SHALL support keyboard dismissal and copying only its human-facing summary and explanation. Clipboard failures SHALL leave the text available for manual copying. Opening or closing the modal SHALL NOT dismiss its notification. Neither notifications nor modal state SHALL be persisted across application restarts.
 

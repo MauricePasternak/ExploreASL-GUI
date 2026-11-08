@@ -8,6 +8,13 @@ Define application-shell layout behavior, including navigation and processing st
 
 ### Requirement: Processing Status Bar in Layout
 
+The active project's footer SHALL show per-module subject-session progress for non-idle processing without becoming a lifecycle authority.
+
+#### Scenario: Footer projects native processing progress
+
+- **WHEN** an active project's processing state is rendered
+- **THEN** the following visibility, counting, and presentation rules SHALL apply:
+
 The Layout component SHALL mount the processing status bar in the active project's footer. The bar SHALL render no content when `processingPhase` is `idle` and SHALL render its group for every other phase, including terminal phases. When statuses are present, it SHALL display per-module completed/total counts in Structural, ASL, Population order, followed by any other modules. Each count SHALL use distinct subject-sessions within that module; a subject-session SHALL count complete when at least one of its statuses is `complete`, including across multiple ASL runs. With no statuses, the non-idle group SHALL contain no progress text. The bar SHALL NOT display a lifecycle label or apply a running-specific accent. Lifecycle authority SHALL remain with the processing store's native run projection, not be inferred from these counts.
 
 #### Scenario: No processing status when idle
@@ -35,6 +42,13 @@ The data parameters route (`/project/:id/parameters`) SHALL display a warning ba
 - **THEN** a warning banner SHALL appear at the top of the page with the text "Processing is running. Changes will take effect on next run."
 
 ### Requirement: Visualization Navbar Entry
+
+The navbar SHALL provide an accessible Visualization entry after Processing, gated by native eligibility and separate active-work navigation guards.
+
+#### Scenario: Visualization navigation reflects eligibility and active work
+
+- **WHEN** the navbar renders for an active project
+- **THEN** the Visualization entry and active-work guards SHALL follow these rules:
 
 The navbar SHALL include a "Visualization" entry in `PHASE_NAV` with `IconChartScatter` as its icon. The entry SHALL appear after the "Processing" entry. The entry SHALL be enabled when `canAccessPhase(project, "visualization")` returns true and active-work navigation guards permit access. When disabled, the entry SHALL be greyed out and non-clickable. When the navbar is collapsed, the entry SHALL display the `IconChartScatter` icon with an accessible aria-label of "Visualization". When expanded, the entry SHALL display both the icon and the "Visualization" label.
 
@@ -66,6 +80,13 @@ Active import SHALL disable all phase entries except Import; active processing S
 - **THEN** the "Visualization" entry SHALL appear immediately after the "Processing" entry
 
 ### Requirement: Manifest Navbar Entry
+
+The navbar SHALL provide an accessible Manifest entry after Visualization, enabled only when native eligibility and active-work guards permit navigation.
+
+#### Scenario: Manifest navigation reflects eligibility and navbar expansion
+
+- **WHEN** the navbar renders its Manifest entry
+- **THEN** its order, icon, accessibility, and enabled state SHALL satisfy these rules:
 
 The navbar SHALL include a "Manifest" entry in `PHASE_NAV` appended after the "Visualization" entry. The entry SHALL use a Tabler icon appropriate to the document/QC-report concept (e.g. `IconClipboardCheck` or `IconFileReport`). The entry SHALL be enabled when `canAccessPhase(project, "manifest")` returns `true` and active-work navigation guards permit access. When disabled, the entry SHALL be greyed out and non-clickable. When the navbar is collapsed, the entry SHALL display the icon with an accessible `aria-label` of "Manifest". When expanded, the entry SHALL display both the icon and the "Manifest" label.
 
@@ -100,6 +121,13 @@ The navbar SHALL include a "Manifest" entry in `PHASE_NAV` appended after the "V
 - **THEN** both entries SHALL be disabled and result-phase route requests SHALL redirect to the current phase, or to Processing when the current phase is Visualization or Manifest
 
 ### Requirement: Safe project and application close
+
+Ordinary project transitions and application close SHALL persist pending edits and settle project-owned work before leaving; failure SHALL retain the current project and offer retry.
+
+#### Scenario: Ordinary close persists edits and settles project work
+
+- **WHEN** Home, project replacement, or ordinary application close is requested
+- **THEN** persistence, shutdown, confirmation, and failure handling SHALL follow this contract:
 
 Return to Home, project replacement, and ordinary application close SHALL submit pending edits and wait for the latest accepted configuration to persist, then wait for project-owned import/processing shutdown and native result persistence. Save, validation, or shutdown failure SHALL cancel navigation/exit, keep current state visible, and show actionable retry guidance. The application SHALL not offer an ordinary "leave without saving" path. Active cancellable execution SHALL retain explicit abort confirmation, and non-cancellable finalization SHALL retain its wait policy. Operating-system force termination SHALL remain outside these guarantees.
 

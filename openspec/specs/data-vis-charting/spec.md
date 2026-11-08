@@ -159,6 +159,13 @@ When any axis assignment changes (X, Y, or color-by), the selected point SHALL b
 
 ### Requirement: Color-By Grouping
 
+Charts SHALL color categorical values with the specified accessible palette and encounter ordering, without adding color-by legends or swarmplot subgroups.
+
+#### Scenario: Filtered chart rows are grouped and colored
+
+- **WHEN** color-by is categorical or None
+- **THEN** palette assignment and swarmplot grouping SHALL follow these rules:
+
 When color-by is set to a categorical column, points SHALL be colored by the column's values using the Okabe-Ito 8-color colorblind-safe palette, assigned in encounter order among filtered chart rows and cycled for additional values. If color-by is "None", all points SHALL use a single default color. Swarmplots SHALL group points by X-axis category and color individual nodes within each group, without separate color-by subgroups. X-axis groups SHALL follow encounter order in filtered chart rows, not persisted `levelOrderings`. Neither chart SHALL configure a color-by legend.
 
 #### Scenario: Single color when no color-by
@@ -183,6 +190,13 @@ When color-by is set to a categorical column, points SHALL be colored by the col
 
 ### Requirement: Missing Data Exclusion in Charts
 
+Charts SHALL exclude rows missing axis values, distinguish missing-data exclusions from domain filtering, and retain rows missing only non-axis data.
+
+#### Scenario: Chart rows contain missing values or become unplottable
+
+- **WHEN** supported axes and domain filters are applied
+- **THEN** exclusions, counters, empty-state text, and Unknown coloring SHALL follow these rules:
+
 Rows where either the X or Y column value is missing SHALL be excluded from chart data. With supported axes assigned and at least one plottable point remaining after domain filtering, the chart SHALL display "N points plotted" with an additional "(M rows excluded due to missing data)" count when exclusions exist, and a separate count when domain filters hide points. When supported assigned axes yield no remaining points, the chart SHALL instead show "No plottable data. Selected columns have no valid values." without a point, exclusion, or domain-filter counter. Rows with missing color-by values SHALL be grouped under "Unknown" and receive the next palette color like other categorical values, not a reserved gray color. Rows with missing non-axis values SHALL NOT be excluded.
 
 #### Scenario: Rows excluded for missing axis values
@@ -201,6 +215,13 @@ Rows where either the X or Y column value is missing SHALL be excluded from char
 - **THEN** the chart area SHALL show "No plottable data. Selected columns have no valid values." without a point or exclusion counter
 
 ### Requirement: Domain Filter Inputs
+
+Visualization settings SHALL expose persisted axis-range filters in a right-side drawer, treating empty bounds as unrestricted and deriving placeholders from chart data.
+
+#### Scenario: A user opens settings and changes axis bounds
+
+- **WHEN** visualization range filters are displayed or edited
+- **THEN** drawer state, inputs, placeholders, and filtering SHALL follow these rules:
 
 A "Settings" button beside the axis controls SHALL toggle a right-side drawer titled "Visualization Settings". Its "Axes Range Filters" section SHALL contain four inputs: X min, X max, Y min, Y max. Placeholders SHALL show numeric chart-data min/max values, or an em dash when unavailable. Empty inputs SHALL mean no filter for that bound. Entered values SHALL filter chart rows; an X bound SHALL retain only numeric X values satisfying that bound. Drawer open state SHALL persist in `uiState.dataVis.filtersExpanded`, alongside separate persisted domain filter values.
 
@@ -249,6 +270,13 @@ Chart colors SHALL adapt to the active Mantine color scheme (light/dark). A shar
 - **THEN** point colors SHALL remain the same (Okabe-Ito palette is theme-independent)
 
 ### Requirement: Chart Data Transformation
+
+`chartData` SHALL contain typed nivo-ready points with preserved raw participant identifiers and correctly translated GUI Session and Run fields.
+
+#### Scenario: Inspected rows become chart points
+
+- **WHEN** visualization transforms rows using the saved column contract
+- **THEN** point fields and numeric parsing SHALL satisfy this shape:
 
 The `visualizationStore.chartData` SHALL store transformed nivo-ready data points, not raw TSV rows. Each point SHALL be an object with: `x` (X column value), `y` (Y column value, number), `id` (composite `participantId + "_" + run`), `colorBy` (categorical value or undefined), `participantId` (raw TSV `participant_id` value, e.g. `"sub-001Philips_01"`), `subject` (parsed from `participant_id`, e.g. `"sub-001Philips"`), `session` (parsed from `participant_id`, e.g. `"01"` — GUI Session), `run` (TSV `session` column value, e.g. `"ASL_1"` — GUI Run, used for qCBF filename and protocol URL). The transformation SHALL parse numeric values according to column types from the contract.
 

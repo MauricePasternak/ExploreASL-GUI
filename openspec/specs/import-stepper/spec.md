@@ -49,6 +49,13 @@ Step 4 "Preview Import" SHALL display the staging mapping table, config JSON pre
 
 ### Requirement: Step locking during execution
 
+Import controls SHALL remain locked throughout attached active native work, permitting Stop only for cancellable runs and unlocking correction or re-run flows only after authoritative reconciliation.
+
+#### Scenario: Attached import lifecycle changes
+
+- **WHEN** native import enters an active or terminal phase
+- **THEN** navigation, editing, Stop, and retry availability SHALL follow these rules:
+
 When the attached native import run is `preparing`, `running`, `finalizing`, or `cancelling`, Step 4, navigation to Parameters, execution profile, subject selection, Start, and retry controls SHALL remain locked. Stop SHALL be available only for a cancellable matching run. Finalization SHALL show non-cancellable verification/relocation progress and SHALL not unlock controls because the child process exited. `Failed`, `Cancelled`, and `Interrupted` outcomes SHALL unlock correction and retry controls after authoritative reconciliation. `Completed` SHALL allow earlier steps while requiring existing explicit re-run confirmation.
 
 #### Scenario: Import running, user tries to go back
@@ -88,6 +95,13 @@ When the attached native import run is `preparing`, `running`, `finalizing`, or 
 
 ### Requirement: Field-level staging validation feedback
 
+Import SHALL present structured staging issues and accept asynchronous validation or run updates only for the current plan, ProjectLease, and native run identity.
+
+#### Scenario: Preview validation or reserved import returns asynchronously
+
+- **WHEN** mapping feedback, launch responses, events, or cancellation arrive
+- **THEN** issue display, listener sequencing, and stale-response rejection SHALL follow these rules:
+
 The Import mapping and preview UI SHALL show aggregate and field-level staging validation feedback with stable error codes, affected entries and fields, corrective messages, conflicting entries, explicit suggestion acceptance, and stable `data-testid` attributes. Native preflight state SHALL remain session-only and scoped to the current ProjectLease and plan fingerprint.
 
 Run Import SHALL first reserve a native run, then install run-scoped listeners, attach to close listener races, and launch only the exact reservation. Post-await responses and events SHALL mutate validation, logs, phase, and controls only when their native run identity and ProjectLease remain current. Restored projects SHALL return to Preview for new execution unless discovery finds matching active or replayable native work. Stop SHALL retain native lifecycle state until matching cancellation is confirmed.
@@ -118,6 +132,13 @@ Run Import SHALL first reserve a native run, then install run-scoped listeners, 
 - **THEN** both rows SHALL identify the conflict and execution SHALL remain blocked
 
 ### Requirement: Step 5 ImportExecution component
+
+Import step 5 SHALL render distinct native lifecycle states, run controls, subject progress, logs, and verified terminal summaries with stable test IDs.
+
+#### Scenario: An attached import snapshot is rendered
+
+- **WHEN** step 5 displays active or terminal native import state
+- **THEN** lifecycle presentation and result details SHALL satisfy these rules:
 
 Step 5 SHALL display an authoritative lifecycle badge, run controls, per-subject status table, log panel, and terminal summary using the attached native run snapshot. It SHALL represent `Preparing`, `Running`, `Finalizing`, `Cancelling`, `Completed`, `Failed`, `Cancelled`, and `Interrupted` distinctly. Terminal summaries SHALL show verified/committed and failed subject counts plus structured completion-verification or relocation errors. Every component and state-specific control SHALL expose stable `data-testid` attributes.
 

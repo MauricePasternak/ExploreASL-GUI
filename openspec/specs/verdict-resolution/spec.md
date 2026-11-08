@@ -8,6 +8,13 @@ Defines the conditional Verdict Resolution step that appears when multiple revie
 
 ### Requirement: Disagreement Computation
 
+Disagreements SHALL compare completely rated reviewer statuses per subject-session, excluding Neutral and differences only in reasons or notes, and expose original verdicts indexed by reviewer.
+
+#### Scenario: Reviewer verdicts are compared before resolution
+
+- **WHEN** manifest computes the current disagreement list
+- **THEN** status comparison, eligibility, and returned entries SHALL follow these rules:
+
 The manifest store SHALL compute disagreements by comparing all reviewers' verdicts for each subjectSession. A disagreement SHALL exist for a given subjectSession when any two reviewers' verdicts differ on `status` (i.e., one reviewer has `"pass"` and another has `"fail"`). SubjectSessions where all reviewers agree on `status` SHALL NOT be considered disagreements, regardless of differences in `reason` or `notes`.
 
 SubjectSessions where any reviewer has no verdict (Neutral) SHALL NOT be included in disagreement computation — the multi-reviewer Next gate ensures all reviewers have completed verdicts before this step is reachable.
@@ -55,6 +62,13 @@ The Verdict Resolution step SHALL appear in the manifest stepper ONLY when `disa
 
 ### Requirement: Resolution DataTable
 
+Verdict Resolution SHALL list every disagreement with reviewer statuses, final verdict controls, and full-label quick actions, preserving specified column sizing and narrow-window access.
+
+#### Scenario: Disagreeing subject-sessions are presented for resolution
+
+- **WHEN** the resolution table renders at normal or constrained width
+- **THEN** columns, controls, widths, wrapping, and scrolling SHALL follow these rules:
+
 The Verdict Resolution step SHALL render a `DataTable` displaying all subjectSessions with disagreements. The table SHALL contain the following columns:
 
 1. **Subject** — the subject identifier extracted from the subjectSession string.
@@ -91,6 +105,13 @@ The table SHALL prioritize width according to column content. Subject SHALL use 
 - **THEN** the action buttons SHALL wrap onto additional lines as needed, the row SHALL grow vertically, and the labels "View Images/Reports", "QC Metrics", and "View Logs" SHALL remain fully readable
 
 ### Requirement: Resolution Quick-Access Actions
+
+Each disagreement row SHALL offer existing image/report and log viewers plus an accessibly labeled QC-metrics popover containing the specified subject-session measurements.
+
+#### Scenario: A resolver inspects supporting subject-session evidence
+
+- **WHEN** quick-access actions are displayed or selected
+- **THEN** labels, viewers, and QC metric values SHALL follow these rules:
 
 Each row in the Resolution DataTable SHALL provide three quick-access action buttons:
 
@@ -138,6 +159,13 @@ Current manifest configuration SHALL store resolutions in `resolvedVerdicts`, a 
 - **THEN** its values SHALL remain unchanged
 
 ### Requirement: Resolution Gate For Preview
+
+Preview advancement SHALL require stored resolutions for every current disagreement and complete drafts, with live gate reevaluation, explanatory tooltip, and a separate remaining-resolution count.
+
+#### Scenario: Resolution state changes before Preview
+
+- **WHEN** a disagreement is resolved or a review draft remains incomplete
+- **THEN** Next readiness, tooltip, and resolution status SHALL follow these rules:
 
 The stepper's "Next" button on the Verdict Resolution step (proceeding to Preview & Export) SHALL be disabled whenever any disagreement subjectSession lacks a corresponding entry in `resolvedVerdicts` or a review draft is incomplete. The gate SHALL be re-evaluated on every resolution change. The button tooltip SHALL read "Resolve every current reviewer disagreement before previewing the manifest". A separate status above the table SHALL show the number of disagreements without stored resolutions, or "All disagreements resolved" when none remain.
 

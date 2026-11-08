@@ -8,6 +8,13 @@ Protect local ExploreASL execution and project mutation with one native applicat
 
 ### Requirement: Confined durable authority
 
+Durable recovery authority SHALL remain confined to validated project-relative artifacts, preserve unknown content, and report uncertain post-replacement durability without inventing prior-record authority.
+
+#### Scenario: Native records or owned artifacts are validated and replaced
+
+- **WHEN** persistence or recovery accesses project-owned paths
+- **THEN** confinement, flushing, replacement, and independent domain policy SHALL follow these rules:
+
 The system SHALL restrict recovery records and owned artifacts to validated project-relative paths, reject unsafe path components and unsupported entry types, and preserve unknown content. Durable record replacement SHALL flush candidate contents before atomic replacement and synchronize affected directories where supported. A post-replacement synchronization failure SHALL report uncertain durability without claiming the prior record remains authoritative. Domain-specific validation and recovery policy SHALL remain independent.
 
 #### Scenario: Unsafe record path
@@ -21,6 +28,13 @@ The system SHALL restrict recovery records and owned artifacts to validated proj
 - **THEN** the operation SHALL report uncertain durability and SHALL NOT publish acknowledged durable success or blindly restore an earlier record
 
 ### Requirement: Single desktop application authority
+
+Desktop startup SHALL establish one application process per supported user session before project work, with one serialized active project capability and no claim of distributed locking.
+
+#### Scenario: A second application instance starts
+
+- **WHEN** desktop startup coordinates application and project authority
+- **THEN** plugin order, focus handoff, serialization, and supported-scope limits SHALL follow these rules:
 
 The desktop application SHALL enforce one running ExploreASL GUI process per user session on Linux, macOS, and Windows. The single-instance mechanism SHALL initialize before other application plugins. A second launch SHALL notify and focus or restore the existing main window, then exit before project recovery, hydration, or mutation. Native state SHALL expose one active confined project capability and SHALL serialize project replacement with import, processing, setup, and save operations.
 
@@ -37,6 +51,13 @@ Concurrent project access from another login session, host, shared mount, differ
 - **THEN** in-process transition ownership SHALL drain or reject that work before another project becomes active
 
 ### Requirement: Standard local process scopes
+
+Native supervision SHALL own supported POSIX process groups or Windows Job Objects independently of renderer lifetime, settling scoped workers, bounded diagnostics, and probes before reporting completion without expanding into unsupported process-tree containment.
+
+#### Scenario: Native workers or probes run and require settlement
+
+- **WHEN** import, processing, discovery, validation, or shutdown supervises external commands
+- **THEN** platform scopes, termination, output limits, deadlines, and authority boundaries SHALL follow these rules:
 
 Import, processing, and launch-related probes SHALL be supervised by the native application independently of renderer lifetime. Linux and macOS commands SHALL start as POSIX process-group leaders. Windows commands SHALL be assigned to Job Objects before execution. Live process identities and handles SHALL remain in native memory and SHALL NOT cross public IPC or become restart-time termination authority.
 
@@ -78,6 +99,13 @@ MATLAB release discovery, Apptainer/Singularity executable discovery and validat
 
 ### Requirement: Honest abnormal-interruption recovery
 
+Ownerless nonterminal execution SHALL become Interrupted and preserve scientific state, blocking new work until exact external-stop confirmation without persisted-PID adoption or unsupported quiescence claims.
+
+#### Scenario: Native process death leaves a durable nonterminal run
+
+- **WHEN** project recovery finds no matching in-process owner
+- **THEN** viewing, confirmation, pre/post-commit cleanup, and terminal replay SHALL follow these rules:
+
 The system SHALL NOT claim that abrupt native-process death terminates Unix workers. A durable nonterminal run found without matching in-process ownership SHALL become Interrupted while scientific outputs and recovery artifacts remain preserved. Project viewing MAY continue, but import and processing admission SHALL remain blocked until the user explicitly confirms through operating-system tools that external MATLAB/Apptainer work has stopped.
 
 Confirmation SHALL identify the exact current project and run, SHALL NOT signal or adopt a persisted PID/PGID, and SHALL NOT represent kernel quiescence proof. After confirmation, pre-execution processing recovery MAY restore only proven GUI-owned artifacts; post-execution recovery SHALL preserve current ExploreASL/scientific state and remove only proven GUI-owned residue. The resulting terminal record SHALL remain replayable until project metadata is saved and exactly acknowledged.
@@ -98,6 +126,13 @@ Confirmation SHALL identify the exact current project and run, SHALL NOT signal 
 - **THEN** the run SHALL NOT be relabeled Interrupted and SHALL remain attachable
 
 ### Requirement: Experimental guardian records fail clearly
+
+Unsupported guardian-era records SHALL fail without mutation and provide checkpoint-or-clean-copy guidance, while released pre-guardian import records retain their existing compatibility.
+
+#### Scenario: Recovery encounters experimental containment fields or versions
+
+- **WHEN** persisted records are checked against supported domain formats
+- **THEN** rejection, preserved bytes, recovery guidance, and compatibility SHALL follow these rules:
 
 The system SHALL reject unshipped records containing guardian attempts, quiescence bindings, or unsupported guardian-era processing versions. Rejection SHALL preserve all bytes and SHALL explain that the checkpoint build must settle and acknowledge the run, or that a verified clean project copy must be restored. No automatic migration, deletion, PID signaling, or compatibility execution path SHALL be added.
 

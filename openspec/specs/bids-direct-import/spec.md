@@ -32,6 +32,13 @@ A project SHALL declare its data source at creation via `projectMeta.dataSource:
 
 ### Requirement: Processing eligibility uses native allowedPhases
 
+Processing navigation eligibility SHALL come from native `allowedPhases`, honoring the saved phase cursor and data-source readiness without fabricating completion or authorizing execution.
+
+#### Scenario: Native phase eligibility is projected for a saved project
+
+- **WHEN** Processing access is evaluated for the project's saved phase and source kind
+- **THEN** cursor, readiness, and active-work guards SHALL follow these rules:
+
 `canAccessPhase(project, "processing")` SHALL check membership in the native snapshot's `allowedPhases`, not independently derive eligibility from import flags. Native `allowedPhases` SHALL include Processing when the saved `projectMeta.currentPhase` cursor is Processing, Visualization, or Manifest, even when the applicable import readiness flag is absent or false.
 
 When the current cursor is Import or Parameters, later Processing access SHALL require data-source readiness:
@@ -77,6 +84,13 @@ When native BIDS review confirmation succeeds, the store MUST set `project.uiSta
 
 ### Requirement: mappingState populated from BIDS review on confirm
 
+Successful BIDS review confirmation SHALL project detected groups into portable metadata-group and subject/session mappings, rejecting conflicting group assignments and leaving DICOM-only fields at defaults.
+
+#### Scenario: Confirmed BIDS groups become project mappings
+
+- **WHEN** BIDS review confirmation succeeds
+- **THEN** mapping projection, duplicate handling, and untouched defaults SHALL satisfy this contract:
+
 When BIDS review confirmation succeeds, the store MUST write to `mappingState`:
 
 - `metadataGroups`: derived from `BidsReviewState.detectedGroups` projected down to `MetadataGroup` (pick `id`, `label`, `bidsParams` of each)
@@ -97,6 +111,13 @@ Other `mappingState` fields (`rawPaths`, `pathPatterns`, `bMatchDirectories`, `t
 - **THEN** native confirmation SHALL reject the conflicting group assignments without changing the accepted project mapping, confirmation flag, or phase; navigation to Parameters SHALL not occur
 
 ### Requirement: Skipped subjects persisted to ImportUiState
+
+Confirmed BIDS review SHALL persist scan-reported skipped subject/session identifiers in `uiState.import.skippedSubjects`, without inventing per-entry reasons or changing session-label conventions.
+
+#### Scenario: Scan exclusions are persisted on confirmation
+
+- **WHEN** a BIDS review containing skipped identifiers is confirmed
+- **THEN** the persisted field and identifier format SHALL follow these rules:
 
 `ImportUiStateSchema` SHALL add required `skippedSubjects: string[]` field (default `[]`). On successful BIDS review confirmation, `skippedSubjects` SHALL retain the identifiers reported by sidecar scanning, without per-entry reasons; scan skip conditions and limitations are defined in `bids-sidecar-scanning`. Format follows the session convention: `"sub-{subjectLabel}_{sessionLabel}"` where cross-sectional defaults to `"1"` (not `"01"`) and explicit `ses-XX` preserves the label after stripping the `ses-` prefix.
 

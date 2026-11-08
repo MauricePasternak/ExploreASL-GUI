@@ -6,6 +6,13 @@ Define import progress state, parsing, and persistence behavior.
 
 ### Requirement: Portable staging identifier validation
 
+Import staging identifiers SHALL satisfy the shared portable component, source-provenance, and uniqueness contract without silent correction; session-only preflight results SHALL require current request, plan, and lease authority.
+
+#### Scenario: Saved or edited staging identifiers undergo preflight
+
+- **WHEN** identifiers or native preflight results are evaluated before execution
+- **THEN** validation, collision handling, explicit correction, and response admission SHALL follow these rules:
+
 The import store SHALL validate the Subject, Session, Run, Run alias, and Modality values used to construct the four-level staging destination before import execution. Every value SHALL be non-empty, already Unicode NFC-normalized, and exactly one relative filesystem component. Values SHALL reject `.` and `..`, absolute-path syntax, path separators, Unicode General Category `Cc` controls, Windows-forbidden filename characters, trailing spaces or periods, and Windows device names under case-insensitive comparison on the basename before its first dot. Device names include `CON`, `PRN`, `AUX`, `NUL`, `CLOCK$`, `COM1`–`COM9`, `LPT1`–`LPT9`, and superscript-digit `COM`/`LPT` names.
 
 Subject rename targets SHALL contain only ASCII letters and digits as a BIDS entity label and SHALL NOT include the literal `sub-` prefix. Modality SHALL be one of the supported ExploreASL modality names. Session and Run SHALL satisfy the common portable component contract without silently changing the user's value.
@@ -41,6 +48,13 @@ The runtime-only native preflight state SHALL carry a plan fingerprint, monotoni
 
 ### Requirement: ImportProgress state shape
 
+Import progress SHALL support the specified lifecycle and optional diagnostic fields without implying that parsers or snapshot reconciliation populate every supported field.
+
+#### Scenario: Parser events and snapshots populate subject progress
+
+- **WHEN** import progress is updated from supported event sources
+- **THEN** schema values and runtime population limits SHALL satisfy this contract:
+
 The `ImportProgress` type in the import store SHALL support optional `currentStep` and `errorStep` values of `"DCM2NII" | "NII2BIDS"`, `error?: string`, `warnings?: string[]`, `duration?: number` (seconds), and `stale?: boolean`. The `status` field SHALL support values: `"pending"`, `"running"`, `"completed"`, `"failed"`, `"cancelled"`, `"interrupted"`. Schema support SHALL NOT imply runtime population: current parser handling SHALL set `currentStep` from subject-start events and provisional `error` text from failure events, but SHALL NOT copy the failure event's step into `errorStep` or populate per-subject `warnings` or `duration`. Native snapshot reconciliation SHALL supply authoritative status and available error detail, not those optional diagnostic fields.
 
 #### Scenario: Subject fails at NII2BIDS step
@@ -74,6 +88,13 @@ The `ImportProgress` type in the import store SHALL support optional `currentSte
 - **THEN** `importProgress["sub-001"].stale` is `false` (or absent, which is falsy)
 
 ### Requirement: Import store additions
+
+The import store SHALL project attached native lifecycle and outcomes, retain configuration and review state, and persist only acknowledged terminal UI state and the successful attempt baseline.
+
+#### Scenario: Import state is reconciled or persisted
+
+- **WHEN** matching native snapshots update active import presentation
+- **THEN** authoritative projection and session-versus-persisted boundaries SHALL follow these rules:
 
 The import store SHALL represent `idle`, `preparing`, `running`, `finalizing`, `completed`, `failed`, `cancelling`, `cancelled`, and `interrupted` phases plus a runtime-only attached `activeRunId`. Native run snapshots SHALL be authoritative while a run is attached. The store SHALL reconcile phase, selected-subject progress, errors, and terminal result from each accepted snapshot; it SHALL NOT independently complete a run from parser events, local PID state, or frontend post-processing promises.
 
@@ -115,6 +136,13 @@ When import failure output is parsed, native diagnostics SHALL match the descrip
 
 ### Requirement: ImportProgress table population
 
+Import rows SHALL derive completion from matching native committed outcomes or safe committed-artifact reconstruction, allowing only supported parser events to enrich provisional diagnostics.
+
+#### Scenario: Import table rows receive events or reconstructed status
+
+- **WHEN** a run is attached or committed artifacts are audited
+- **THEN** row-population sources and excluded parser authority SHALL follow these rules:
+
 The progress table SHALL be populated from authoritative artifact reconstruction when no unacknowledged run is attached and from the matching native run snapshot while one exists. Only subject-start and parser-failure structured events SHALL enrich provisional row details for the attached run; conversion-status, subject-completion (including duration), and global-completion events SHALL NOT populate subject progress, and stdout warnings SHALL NOT be collected into per-subject warnings. Parser events SHALL NOT set authoritative `completed` status. A subject SHALL display completed only after native verification reports it eligible and committed, or after project artifact reconstruction verifies its committed completion evidence.
 
 #### Scenario: Table shows all subjects during preparation
@@ -143,6 +171,13 @@ The progress table SHALL be populated from authoritative artifact reconstruction
 - **THEN** its provisional row SHALL transition from pending to running without changing terminal authority
 
 ### Requirement: BIDS review slice for scan lifecycle
+
+The session-only BIDS review slice SHALL manage scan results, errors, retries, and resets without duplicating the persisted project's confirmation authority.
+
+#### Scenario: A BIDS scan starts, retries, or revisits confirmed state
+
+- **WHEN** import review actions manage scan lifecycle
+- **THEN** fields, action behavior, and persistence boundaries SHALL satisfy this shape:
 
 `importStore` SHALL add a `BidsReviewState` slice with:
 
@@ -203,6 +238,13 @@ DICOM sources SHALL distinguish project-relative internal locations from absolut
 
 ### Requirement: Missing DICOM source and relinking
 
+Unavailable DICOM sources SHALL preserve saved projects and disable only dependent work, with confirmed structural comparison governing compatible relinking or source-dependent resets through shared autosave.
+
+#### Scenario: A saved DICOM source is missing or replaced
+
+- **WHEN** source availability or a replacement scan is evaluated
+- **THEN** access, guidance, preserved mappings, confirmation, and cancellation SHALL follow these rules:
+
 A missing/unreadable source SHALL preserve saved configuration and allow project opening after existing execution-profile gating. Source-dependent actions SHALL remain disabled with persistent Relink guidance. Replacement scanning SHALL compare path structure before acceptance. Compatible replacements SHALL preserve mappings and update current/successful-snapshot source identities together; incompatible replacements SHALL explain source-dependent resets and require confirmation. Accepted relinks SHALL use shared autosave; cancelled selections or declined resets SHALL leave configuration unchanged.
 
 #### Scenario: External DICOM source is missing
@@ -256,6 +298,13 @@ Opening SHALL reset transient import state, expose accepted current configuratio
 
 ### Requirement: Import run discovery and attachment reconciliation
 
+Import attachment SHALL reconcile typed native snapshots after listener setup, reject stale identities, and persist terminal metadata through exact native reconciliation before acknowledgement.
+
+#### Scenario: Step entry discovers and attaches to native import
+
+- **WHEN** discovery, events, or terminal reconciliation update presentation
+- **THEN** typed clients, identity checks, persistence, and replay retention SHALL follow these rules:
+
 Import presentation SHALL retain typed discovery, attachment, launch, cancellation, and exact-run acknowledgement clients. Step entry SHALL install run-scoped listeners and perform discovery plus a post-listener snapshot read. Updates SHALL require current run and activation identities. The frontend SHALL not derive or save terminal project metadata; a native exact-run reconciliation operation SHALL persist that metadata before acknowledgement. Persistence failure SHALL retain replay and expose an error.
 
 #### Scenario: WebView reloads during running import
@@ -279,6 +328,13 @@ Import presentation SHALL retain typed discovery, attachment, launch, cancellati
 - **THEN** that run SHALL acknowledge and the frontend SHALL expose the persisted result
 
 ### Requirement: Current parameter configuration
+
+Project parameters SHALL use flat optional validated current-contract fields, preserve loose JSON extensions, and retain existing scientific assembly and advanced-visibility placement without legacy nested repair.
+
+#### Scenario: Current parameter configuration is loaded, edited, or assembled
+
+- **WHEN** project state crosses configuration or persistence boundaries
+- **THEN** unset values, validation, extensions, and supported visibility representation SHALL follow these rules:
 
 Project parameter state SHALL use the shared current configuration contract, with flat optional ExploreASL keys under `dataPar`. Unset fields SHALL remain absent; known invalid values SHALL be rejected; loose extension JSON SHALL survive unchanged. Runtime processing assembly SHALL retain its existing scientific key placement. Advanced visibility SHALL persist under `uiState.datapar.advancedVisibility`; obsolete nested-project repair and the old `showAdvancedParameters` representation SHALL not be supported.
 

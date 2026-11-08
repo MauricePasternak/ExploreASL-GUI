@@ -17,6 +17,13 @@ After flushing pending edits and before saving or submitting a fresh processing 
 
 ### Requirement: Processing Phase State Machine
 
+The processing store SHALL project native lifecycle and outcomes, keeping runtime identity session-only and separating idle historical progress from exact native terminal persistence and provenance.
+
+#### Scenario: Processing state is attached, updated, or persisted
+
+- **WHEN** native lifecycle or idle presentation enters the store
+- **THEN** phases, authority, metadata, and restart boundaries SHALL follow these rules:
+
 The processing store SHALL project native `preparing`, `running`, `finalizing`, `completed`, `cancelling`, `cancelled`, `failed` and `interrupted` lifecycle states, plus local `idle` when no native run is attached. Runtime run identity and worker membership SHALL NOT persist as restart authority. Terminal phase and last run configuration SHALL save through exact terminal persistence. Idle progress SHALL reconstruct from safe status reads; active outcomes SHALL derive only from accepted native snapshots. Population commit, completion, version and ready-mtime metadata SHALL follow Exact processing terminal persistence; the frontend SHALL NOT probe files or classify worker completion.
 
 #### Scenario: Initial state on page load
@@ -95,6 +102,13 @@ The processing store SHALL project native `preparing`, `running`, `finalizing`, 
 - **THEN** persisted manifest verdicts SHALL remain unchanged and use existing verdict staleness rules
 
 ### Requirement: Process Configuration
+
+The store SHALL edit one accepted processing configuration, enforce Population/module exclusivity, resolve valid profiles, and build pure immutable requests whose derived execution fields remain native-owned.
+
+#### Scenario: Processing selections are edited and submitted
+
+- **WHEN** configuration changes or Start builds a reservation request
+- **THEN** schema, worker normalization, module exclusivity, validation, and launch SHALL follow these rules:
 
 The store SHALL edit the accepted project `ProcessConfig` containing `subjects` (array of selected SubjectSession strings), `modules` (array of `structural`, `asl`, `population`), `selectedProfileId` (string), `workers` (positive integer), and optional `rerunBids2Legacy` (boolean). Start SHALL require at least one module. Available-core limits SHALL be renderer preflight rules, not configuration-schema or native-request CPU bounds. Accepted configuration edits selecting Population SHALL normalize `workers` to 1. `subjectRegexp` SHALL NOT be a `ProcessConfig` field. The immutable renderer request SHALL carry `selectedModules` and `selectedSubjectSessions`; native preparation/launch SHALL derive the `bProcess` vector, `x.dataset.subjectRegexp` and nonempty-selection `x.dataset.ForceInclusionList`. Native canonicalization SHALL remove renderer-supplied `x.opts` and `x.dataset` from durable request content before regenerating those sections from native project/request authority.
 
@@ -183,6 +197,13 @@ Before reservation, `startProcessing` SHALL:
 
 ### Requirement: Subject List Discovery
 
+Processing subject discovery SHALL translate source-specific native BIDS inventory into available subject/session entries and filename-based module flags without treating default ASL Run as evidence of available ASL data.
+
+#### Scenario: The store loads available project subjects
+
+- **WHEN** `list_subjects` returns BIDS-direct or imported inventory
+- **THEN** roots, entry fields, availability, and empty-perfusion fallback SHALL follow these rules:
+
 The store SHALL provide `availableSubjects` populated by calling `list_subjects` with the project's data source. Discovery SHALL scan `rawdata/sub-X/` for DICOM projects and root-level `sub-X/` for BIDS-direct projects, using the BIDS session conventions defined in `processing-backend`. Each entry SHALL include the SubjectSession string (`sub-X_Y`), the subject label, session label, and module availability flags (`hasStructural`, `hasASL`) derived from nonempty discovered anatomical/ASL file lists, not directory presence alone. An empty `perf/` directory MAY yield default `aslRuns: ["1"]` while `hasASL` remains false; that run fallback SHALL NOT create an ASL expected target or bypass renderer missing-ASL validation.
 
 #### Scenario: No rawdata directory
@@ -201,6 +222,13 @@ The store SHALL provide `availableSubjects` populated by calling `list_subjects`
 - **THEN** the subject list SHALL include `{ subjectSession: "sub-001Philips_01", hasStructural: true, hasASL: false }`
 
 ### Requirement: Per-Subject Progress Tracking
+
+Subject-module progress SHALL retain status, steps, Run, and separate lock state, deriving active progress from native targets while keeping watcher and historical observations nonauthoritative for completion.
+
+#### Scenario: Subject progress is projected from native or historical observations
+
+- **WHEN** target snapshots, watcher progress, or idle status reads arrive
+- **THEN** row shape, lock meaning, and completion authority SHALL follow these rules:
 
 The store SHALL maintain `subjectStatuses` as an array of `SubjectModuleStatus` objects. Each entry SHALL track: `subjectSession`, `module` (structural/asl/population), optional `run` (for ASL), `status` (pending/incomplete/complete/outdated), `completedSteps` (array of step code strings), and `locked` (boolean). The `locked` field is a separate attribute from `status` — when `locked` is true and `status` is not `complete`, the subject is being processed. Active progress SHALL be projected from native target snapshots. Native watcher observations SHALL inform progress only; they SHALL NOT establish successful run completion. Idle historical status reads SHALL remain presentation-only.
 
@@ -227,6 +255,13 @@ The store SHALL maintain `subjectStatuses` as an array of `SubjectModuleStatus` 
 
 ### Requirement: Last Run Config Persistence
 
+Processing selections and native terminal phases SHALL persist through the accepted project configuration, preserving independent completion and provenance and blocking Start for a missing saved profile.
+
+#### Scenario: Accepted selections or terminal phase are persisted
+
+- **WHEN** configuration is saved or its selected profile is unavailable
+- **THEN** storage paths, form authority, preserved results, and profile gating SHALL follow these rules:
+
 Accepted processing selections SHALL persist under `uiState.processing.config`, using `selectedProfileId`, and accepted native terminal phases SHALL persist under `uiState.processing.currentPhase`. The form SHALL read one accepted project configuration, not an independently editable persisted mirror. Selection edits SHALL preserve structural, ASL, and Population completion/provenance. A missing saved profile SHALL show "Profile not found" and disable Start until a valid profile is selected. Existing application startup/open/create profile gating SHALL remain unchanged.
 
 #### Scenario: Config restoration on page load
@@ -246,6 +281,13 @@ Accepted processing selections SHALL persist under `uiState.processing.config`, 
 
 ### Requirement: Native processing snapshot projection
 
+The store SHALL accept only current-identity increasing native revisions, reconcile listener races, and keep filesystem preparation and completion authority native-owned, never attaching historical replay as current work.
+
+#### Scenario: Processing attaches or receives asynchronous native updates
+
+- **WHEN** reservation, snapshots, missed events, or replay envelopes are handled
+- **THEN** identity admission, listener reconciliation, ownership boundaries, and Interrupted actions SHALL follow these rules:
+
 The processing store SHALL build pure request inputs and project native processing snapshots. It SHALL accept only the current project/run identity, current activation generation and increasing revisions, reconcile after missed events, and expose native logical worker/target progress. It SHALL NOT own watcher startup/shutdown, participant/configuration filesystem writes, completion inference, raw process ownership, or renderer-local rollback disposition. Run launch and completion SHALL remain correct when listeners mount late or the renderer reloads. Start SHALL remain registered through existing project-transition work admission; rejected admission SHALL have no preparation or Population metadata effects. Attachment SHALL reconcile a snapshot after listener registration to close missed-event races. Tagged historical replay envelopes SHALL be handled as idempotent responses, never attached or projected into current state. Idle dashboard status reads MAY supply historical progress but SHALL NOT determine an active run outcome. A `confirmStopped` action SHALL be projected only from an exact Interrupted native snapshot and SHALL never be synthesized locally.
 
 #### Scenario: Stale snapshot arrives
@@ -264,6 +306,13 @@ The processing store SHALL build pure request inputs and project native processi
 - **THEN** the store SHALL block Start, display external-process guidance, and invoke only exact-run/revision confirmation when the user accepts
 
 ### Requirement: Exact processing terminal persistence
+
+Native terminal reconciliation SHALL save eligible result metadata before exact acknowledgement, preserving replay on failure and updating Population prerequisite/provenance only from accepted execution-commit and terminal evidence.
+
+#### Scenario: A terminal processing result is reconciled
+
+- **WHEN** eligible native evidence is persisted and acknowledged
+- **THEN** interruption gates, idempotence, commit/completion effects, and independent verdict preservation SHALL follow these rules:
 
 Eligible native terminal evidence SHALL update and persist project configuration before acknowledgement of the exact run and terminal revision. The frontend SHALL request or display reconciliation, not derive and save result metadata. Interrupted evidence requiring external-stop confirmation SHALL not acknowledge or claim completion. Persistence or acknowledgement failure SHALL retain replay and expose actionable errors; repeated replay SHALL remain idempotent. Population completion/provenance SHALL derive solely from accepted native execution commit and terminal evidence. Pre-commit preparation failure SHALL preserve prior completion; accepted Population execution commit SHALL invalidate it; accepted Completed evidence SHALL set it with native versions and ready-file mtime. Post-commit spawn failure SHALL not restore historical claims. Non-Population runs SHALL preserve Population completion and all reviewer verdicts.
 

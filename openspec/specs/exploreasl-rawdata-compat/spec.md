@@ -8,6 +8,13 @@ Preserve raw BIDS and DICOM source data compatibility while ExploreASL processin
 
 ### Requirement: Root-level participants.tsv never modified
 
+GUI participant preparation SHALL never modify root participant metadata, reading it only for BIDS-direct site lookup and installing working metadata exclusively in derivatives.
+
+#### Scenario: Participant metadata is prepared for either source type
+
+- **WHEN** GUI preparation or ExploreASL Population uses participant metadata
+- **THEN** root-file preservation and derivative ownership SHALL follow these rules:
+
 For both DICOM-import and BIDS-direct projects, root-level `<projectRoot>/participants.tsv` (if present) SHALL never be written or modified by GUI code. Native participant preparation MAY read it for BIDS-direct site-column lookup as defined below; DICOM preparation SHALL NOT read it. Participant installation operates exclusively on derivative files under `<projectRoot>/derivatives/ExploreASL/`. ExploreASL Population module appends processing-derived columns (`gm_vol`, `motion`, etc.) to the derivatives file, not root.
 
 #### Scenario: User-authored participants.tsv preserved
@@ -16,6 +23,13 @@ For both DICOM-import and BIDS-direct projects, root-level `<projectRoot>/partic
 - **THEN** root-level `participants.tsv` retains its original 16 columns throughout; GUI and ExploreASL operations target `derivatives/ExploreASL/participants.tsv` only
 
 ### Requirement: subjectFolder override injected into dataPar.json
+
+Native assembly SHALL derive BIDS-direct `subjectFolder` in the executor's namespace and omit it for DICOM, without mutating reserved configuration or project identity.
+
+#### Scenario: MATLAB or Apptainer processing configuration is assembled
+
+- **WHEN** native preparation builds `dataPar.json` for a project
+- **THEN** source-specific overrides, namespace translation, and compatibility SHALL follow these rules:
 
 When native processing preparation assembles configuration for a project with `dataSource === "bids"`, the resulting `dataPar.json` MUST include the absolute path to the current project root directory in the executor's filesystem namespace in `x.opts.subjectFolder`, replacing any supplied value. MATLAB uses the current absolute host project root; Apptainer uses `/data`, the existing container binding of that same root. Assembly SHALL derive this field without mutating the reserved configuration or changing the host project identity. For example, with MATLAB:
 
@@ -49,6 +63,13 @@ ExploreASL reads `x.opts.subjectFolder` in `xASL_init_SubjectList.m` and overrid
 
 ### Requirement: list_subjects refactored to parse_bids_structure
 
+Subject listing SHALL reuse the common BIDS parser at the source-appropriate root, preserving the existing `SubjectInfo` contract and cross-sectional session convention.
+
+#### Scenario: Subjects are listed for BIDS-direct or DICOM import
+
+- **WHEN** `list_subjects` receives a project root and optional source kind
+- **THEN** root selection, mapping, and session defaults SHALL follow these rules:
+
 The `list_subjects(project_root: String, data_source: Option<String>)` command SHALL delegate to `bids::scan::parse_bids_structure` using the project root for `"bids"` and `project_root.join("rawdata")` for `"dicom"` or omitted data source. The existing `SubjectInfo` frontend contract is preserved: `BidsSubject`/`BidsSession` mappings produce equivalent `SubjectInfo` entries with `subject_session`, `subject`, `session`, `has_structural`, `has_asl`, and `asl_runs` fields.
 
 Cross-sectional handling: `parse_bids_structure` defaults missing `ses-*` to session `"1"` (per cross-sectional convention). DICOM-import projects (which always have `ses-*` directories after import via NII2BIDS) remain unaffected.
@@ -64,6 +85,13 @@ Cross-sectional handling: `parse_bids_structure` defaults missing `ses-*` to ses
 - **THEN** two `BidsSubject` entries returned, with `subject_label = "sub-001"`/`"sub-002"`, each with one `BidsSession` with `session_label = "01"` and `has_explicit_session = true`
 
 ### Requirement: participants.tsv site-column precedence for BIDS-direct projects
+
+BIDS-direct participant preparation SHALL preserve root-authored site values in derivatives, using group labels only as permitted fallback and retaining source-specific DICOM behavior.
+
+#### Scenario: Root-authored site values coexist with metadata grouping
+
+- **WHEN** participant metadata is prepared with grouping correction enabled or disabled
+- **THEN** lookup precedence, derivative installation, and root preservation SHALL follow these rules:
 
 In BIDS-direct projects (`dataSource === "bids"`), if the root-level `<projectRoot>/participants.tsv` exists and contains a `site` column, its values SHALL take precedence:
 

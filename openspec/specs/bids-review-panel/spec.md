@@ -22,6 +22,13 @@ Define the BIDS-direct import review interface and its validation workflow.
 
 ### Requirement: BIDSReviewPanel renders group cards with editable labels
 
+`BIDSReviewPanel` SHALL render editable detected-group cards with participant/session membership, expandable parameters, summarized ASL context, and readable acquisition badges.
+
+#### Scenario: Detected metadata groups are displayed for review
+
+- **WHEN** detected `DerivedMetadataGroup` entries are available
+- **THEN** every group card SHALL contain the following controls and metadata:
+
 `BIDSReviewPanel` SHALL render one card per detected `DerivedMetadataGroup`. Each card shows:
 
 - Label as an inline editable input (auto-suggested value pre-filled; user may edit)
@@ -50,6 +57,13 @@ Define the BIDS-direct import review interface and its validation workflow.
 
 ### Requirement: Pre-existing participants.tsv banner persisted
 
+Editable and confirmed BIDS review SHALL disclose that an existing root `participants.tsv` remains unchanged while processing uses its own derivative working copy.
+
+#### Scenario: Root participants metadata exists
+
+- **WHEN** the asynchronous root-file check finds `participants.tsv`
+- **THEN** review and confirmed summary SHALL present this banner:
+
 `BIDSReviewPanel` SHALL render a banner above group cards in editable review and confirmed summary when `participants.tsv` exists at project root. The frontend checks for this file asynchronously using the Tauri fs plugin `exists` command on `<projectRoot>/participants.tsv`.
 
 > "Your existing `participants.tsv` (at project root) is not modified by ExploreASL GUI. During processing, ExploreASL generates its own working copy at `derivatives/ExploreASL/participants.tsv` and appends processing-derived columns (`site`, `gm_vol`, `motion`, etc.) there. Your root-level file stays as you authored it."
@@ -61,6 +75,13 @@ Define the BIDS-direct import review interface and its validation workflow.
 
 ### Requirement: Skipped subjects warning block
 
+BIDS review and confirmed summary SHALL display scan-reported skipped identifiers with appropriate retry guidance, without inventing reasons or claiming every skipped session is absent from all groups.
+
+#### Scenario: Review contains skipped subject/session identifiers
+
+- **WHEN** editable review or its confirmed summary has skipped identifiers
+- **THEN** identifier display and guidance SHALL follow these rules:
+
 In editable group review and the confirmed summary, `BIDSReviewPanel` SHALL render a warning block when skipped identifiers are present. Each entry SHALL show the subject/session identifier in `sub-XX_<session>` form. The scan supplies string identifiers, not per-entry reasons; the panel SHALL NOT infer a specific missing-file or parsing reason for an entry.
 
 The block SHALL show shared guidance: "These subjects will be excluded from processing. To include them, add the missing file externally and click Retry." The confirmed summary SHALL instead refer to "Re-scan BIDS". This generic warning does not establish that every skipped identifier is absent from all returned scan groups; the native scan limitations are defined in `bids-sidecar-scanning`.
@@ -71,6 +92,13 @@ The block SHALL show shared guidance: "These subjects will be excluded from proc
 - **THEN** the skipped-subjects warning block SHALL display `sub-05_1` and shared retry guidance, without a per-entry reason
 
 ### Requirement: Edge states
+
+`BIDSReviewPanel` SHALL provide explicit loading, failure, empty-result, and group-count states, with retry and context-appropriate return actions.
+
+#### Scenario: Review state or detected group count changes
+
+- **WHEN** scanning runs, fails, or returns a particular number of groups
+- **THEN** the panel and store actions SHALL satisfy this state table:
 
 `BIDSReviewPanel` SHALL render these edge states:
 
@@ -96,6 +124,13 @@ The block SHALL show shared guidance: "These subjects will be excluded from proc
 - **THEN** `importStore.backToLanding()` resets review state and the panel navigates to `/`; project remains in store
 
 ### Requirement: Confirmation flow
+
+BIDS confirmation SHALL require valid unique group labels and unambiguous subject/session membership; only successful native acceptance SHALL persist mappings and advance to Parameters.
+
+#### Scenario: Editable BIDS groups are submitted for confirmation
+
+- **WHEN** the user reviews overlapping memberships or selects Confirm
+- **THEN** validation, error presentation, persistence, and navigation SHALL follow these rules:
 
 On `[Confirm]` click, `BIDSReviewPanel` SHALL validate:
 
@@ -136,6 +171,13 @@ On successful native confirmation: persist `metadataGroups`, `subjectRows`, and 
 - **THEN** the panel SHALL show a persistent error notification, remain on the review page, and allow another confirmation attempt
 
 ### Requirement: Revisit summary with re-scan/re-confirm
+
+Revisiting confirmed BIDS import SHALL display persisted mappings and exclusions, with an explicit re-scan that returns successful results to editable review.
+
+#### Scenario: A confirmed BIDS project returns to Import
+
+- **WHEN** confirmed import is revisited or explicitly re-scanned
+- **THEN** summary contents and transition back to review SHALL satisfy these rules:
 
 When `uiState.import.bidsReviewConfirmed === true` and user navigates back to Import, `BIDSReviewPanel` SHALL render a persisted summary with an explicit re-scan action:
 

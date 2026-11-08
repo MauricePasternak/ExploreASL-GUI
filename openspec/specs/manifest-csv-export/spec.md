@@ -46,6 +46,13 @@ Clicking the "Export CSV" button SHALL open a Tauri save dialog (via `@tauri-app
 
 ### Requirement: Multi-Reviewer CSV Column Structure
 
+Multi-reviewer CSV SHALL emit one row per subject-session with registry-ordered reviewer triplets, final resolution, and the specified QC metric columns and empty-value fallbacks.
+
+#### Scenario: Multi-reviewer verdict rows are exported
+
+- **WHEN** CSV generation serializes a multi-reviewer manifest
+- **THEN** column order, metric selection, and missing values SHALL satisfy this schema:
+
 In multi-reviewer mode, the CSV SHALL contain a header row followed by one data row per subjectSession. The columns SHALL be, in order:
 
 1. `SubjectSession` — the subjectSession key string (e.g., `"sub-01_01"`).
@@ -107,6 +114,13 @@ No `Final_Verdict`, `Resolution_Notes`, or per-reviewer columns SHALL be present
 
 ### Requirement: Agreement Statistics In CSV
 
+Multi-reviewer CSV SHALL append overall and per-group agreement statistics labeled in subject-session units, omitting the entire agreement section for single-reviewer output.
+
+#### Scenario: CSV export appends reviewer agreement
+
+- **WHEN** verdict rows have been serialized for the current reviewer mode
+- **THEN** separators, labels, metrics, and mode-specific omission SHALL follow these rules:
+
 In multi-reviewer mode, the CSV file SHALL include an agreement statistics section appended after a blank separator row following the verdict data rows. The section SHALL contain:
 
 1. A row: `Agreement Statistics` (spanning the first column, other columns empty).
@@ -135,6 +149,13 @@ In single-reviewer mode, the agreement statistics section SHALL NOT be included.
 - **THEN** the CSV SHALL NOT contain an "Agreement Statistics" section or any Kappa-related rows
 
 ### Requirement: CSV Value Escaping
+
+CSV strings SHALL normalize line endings, protect formula-leading values, and apply RFC 4180 quoting and quote escaping in that order.
+
+#### Scenario: A string value is written to CSV
+
+- **WHEN** a value contains formula prefixes, quotes, commas, or newlines
+- **THEN** serialization SHALL apply these ordered escaping rules:
 
 All string values written to the CSV SHALL normalize line endings to `\n`, apply spreadsheet formula protection, and then use RFC 4180 field escaping:
 

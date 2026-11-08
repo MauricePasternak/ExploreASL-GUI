@@ -8,6 +8,13 @@ Define safe project transitions so each opened project owns a complete, isolated
 
 ### Requirement: Import relocation recovery before activation
 
+Activation SHALL settle validated import-relocation custody and checkpoint matching run evidence before hydration, preserving committed rawdata and unrelated content while rejecting ambiguous recovery and retrying safe derived cleanup independently.
+
+#### Scenario: A candidate project contains unfinished import relocation
+
+- **WHEN** activation inspects relocation records before frontend access
+- **THEN** path authority, old/new custody, checkpoints, cleanup, and blocked recovery SHALL follow these rules:
+
 Project activation SHALL inspect the candidate root for an unfinished native import-relocation recovery record after candidate validation but before normal project hydration, output access, or subprocess launch. Recovery SHALL derive every candidate, destination, and backup path from the canonical candidate project root and validated project-relative record data; it SHALL NOT trust absolute or escaping recorded paths.
 
 For each subject durably recorded as committed, recovery SHALL preserve the installed rawdata replacement and remove only transaction-owned stale rawdata candidates or backups. For each subject not durably committed, recovery SHALL restore the complete previous rawdata destination when one existed or restore destination absence when it did not. After rawdata custody is settled, recovery SHALL retry pending import-lock, import-log, and BIDS2Legacy-lock reconciliation idempotently. Derived cleanup failure SHALL retain staging and the relocation journal and report a warning without rolling back committed rawdata or blocking activation when custody and its durable checkpoint are authoritative. Recovery SHALL finish all safe custody decisions before the project becomes active and SHALL expose a summary of preserved, restored, and cleaned subjects.
@@ -68,6 +75,13 @@ If the recovery record is malformed, references an unsafe path that could affect
 
 ### Requirement: Transactional project transition
 
+Project replacement and close SHALL validate candidates and settle pending edits, native work, recovery, and result persistence before publishing a clean candidate lifecycle, blocking transition rather than discarding ownership on failure.
+
+#### Scenario: A project is opened, replaced, or closed
+
+- **WHEN** a candidate or close request enters the serialized transition
+- **THEN** validation, work admission, persistence, shutdown, recovery, and publication SHALL follow these rules:
+
 Candidate configuration and recoverable source references SHALL validate before replacing the active project. Native import-relocation and durable execution recovery SHALL complete under their existing ownership and confirmation rules before exposing candidate data. Failed candidate validation SHALL leave the current project active. Before replacement or close, the system SHALL prevent new project work, submit pending form edits, persist the latest accepted configuration, cancel cancellable execution, wait for non-cancellable finalization and native result persistence, and stop listeners/watchers. Failure to save, stop, recover, or persist authoritative results SHALL block the transition rather than discard ownership. A successful transition SHALL reset transient state and expose only the candidate's accepted configuration and native execution evidence.
 
 #### Scenario: Candidate project is invalid
@@ -96,6 +110,13 @@ Candidate configuration and recoverable source references SHALL validate before 
 - **THEN** B SHALL not activate and A's edits/errors SHALL remain available
 
 ### Requirement: Complete project-scoped reset and hydration
+
+Each project lifecycle SHALL expose one accepted configuration and reset all transient project state, retaining global settings and preserving sparse values without inheriting prior-project or scientific defaults.
+
+#### Scenario: Project configuration replaces the current lifecycle
+
+- **WHEN** opening, replacement, or close hydrates or resets stores
+- **THEN** cache authority, optional values, transient cleanup, and global-state preservation SHALL follow these rules:
 
 Each active lifecycle SHALL expose one accepted project configuration and separate transient import, parameter-form, processing, manifest, and visualization state. Opening SHALL replace the complete configuration display cache rather than independently hydrate editable persisted copies. Missing optional values SHALL use current UI defaults without inheriting values from the previous project or inserting scientific defaults into saved state. Replacement and close SHALL reset transient mappings/previews, logs, progress, listeners, loaded data, filters, warnings, form drafts, and viewer state. Global settings and execution profiles SHALL remain unchanged.
 
@@ -135,6 +156,13 @@ Every activation SHALL have an identity distinct from persisted project ID and f
 
 ### Requirement: Identity-aware recent projects
 
+Recent Projects SHALL distinguish moved and copied identities with explicit consent, persist deliberate copied identity changes before activation, and preserve files and entries on cancellation.
+
+#### Scenario: A known project identity appears at another path
+
+- **WHEN** recent-project matching finds moved, copied, or stale path-only entries
+- **THEN** path updates, consent, identity writes, and manual removal SHALL follow these rules:
+
 Recent-project state SHALL continue associating paths with known project IDs and accepting existing path-only application settings. A moved project with matching identity and missing old path SHALL replace that recent path without rewriting its configuration. If both paths exist with the same ID, opening SHALL ask whether the selected project was moved or copied. Choosing copied SHALL assign a new ID only after consent, preserve prior copied-run interruption rules, and persist that deliberate identity change through the shared configuration writer before completing activation. Cancelling SHALL leave both files and recent entries unchanged. Unmatched stale path-only entries SHALL remain manually removable.
 
 #### Scenario: Known project moved to new path
@@ -158,6 +186,13 @@ Recent-project state SHALL continue associating paths with known project IDs and
 - **THEN** it SHALL remain removable rather than being guessed to represent another project
 
 ### Requirement: Durable import run recovery before hydration
+
+Activation SHALL recover validated import records after relocation recovery and before frontend access, preserving interrupted work and persisting eligible native terminal metadata before exact acknowledgement without inferred authority.
+
+#### Scenario: Activation discovers durable import-run metadata
+
+- **WHEN** native recovery evaluates import records before hydration
+- **THEN** validation, finalization, interruption, persistence, and rejected authority SHALL follow these rules:
 
 Activation SHALL inspect native import-run metadata after import-relocation recovery and before frontend data access or subprocess admission. Existing checks for record version, identity, relative paths, staging generation, plan binding, transitions, terminal evidence, and interrupted-worker confirmation SHALL remain. Safe finalization SHALL complete idempotently; unowned formerly running work SHALL remain interrupted with preserved staging. Eligible terminal results SHALL update and persist project configuration natively before exact-run acknowledgement. Unsafe or ambiguous evidence SHALL block activation without guessed mutation. Persisted PIDs, absolute record paths, frontend outcomes, and unverified completion artifacts SHALL not authorize recovery.
 
@@ -188,6 +223,13 @@ Activation SHALL inspect native import-run metadata after import-relocation reco
 
 ### Requirement: Single-instance project activation
 
+Single-instance native activation SHALL acquire confined capability and reconcile recovery before publication, then establish renderer state and lease before attachments, retaining accepted state but closing work admission if attachment fails.
+
+#### Scenario: Native activation publishes a candidate to the renderer
+
+- **WHEN** startup or project selection establishes a new active lifecycle
+- **THEN** instance ownership, recovery order, renderer attachment, and support boundaries SHALL follow these rules:
+
 The application SHALL establish single-instance ownership before other plugins initialize. Native project activation SHALL obtain a confined candidate-root capability before recovery, complete required native recovery and eligible processing/import result reconciliation, and only then publish the active root and accepted configuration. Existing project-transition shutdown and stale-generation isolation SHALL remain enforced. A second matching application launch SHALL focus or restore the existing main window and exit before activation or mutation.
 
 After native activation returns, the renderer SHALL reset transient stores, accept the native snapshot, and activate its project work lease before inspecting source availability and synchronizing import then processing attachments. Attachment failure SHALL close renderer work admission and reject the transition without discarding the already accepted snapshot.
@@ -215,6 +257,13 @@ The product SHALL support one application process and one active project per use
 - **THEN** the transition SHALL reject and renderer work admission SHALL close while B's accepted snapshot remains available
 
 ### Requirement: Interrupted execution before activation
+
+Activation SHALL distinguish live in-process attachment from interrupted prior-process work, preserve artifacts, require exact external-stop confirmation, and reject unsupported writable recovery without remembered-PID signaling.
+
+#### Scenario: An opened project contains live, moved, or copied execution records
+
+- **WHEN** activation evaluates run ownership and durable format compatibility
+- **THEN** attachment, interruption gates, root rebinding, and copied-record handling SHALL follow these rules:
 
 Activation SHALL distinguish current in-process ownership from a durable nonterminal record left by a prior native process. Current ownership SHALL remain attachable across renderer reload. Prior-process work SHALL become Interrupted, preserve scientific and recovery artifacts, allow project viewing, and block import/processing admission until exact user confirmation that external MATLAB/Apptainer work has stopped. Activation SHALL NOT signal remembered process identities.
 
@@ -251,6 +300,13 @@ Settled moved projects SHALL bind stable project identity to the newly opened ro
 - **THEN** writable recovery/execution SHALL fail with compatible-build guidance without deleting the record
 
 ### Requirement: Project-local configuration authority
+
+Configuration and recovery authority SHALL remain project-local and selection-triggered, supporting one active desktop project per user session without concurrent worker configuration edits or new distributed-execution guarantees.
+
+#### Scenario: A selected project stores configuration or requires setup recovery
+
+- **WHEN** project-local persistence runs with or without writable application-data storage
+- **THEN** storage placement, authority, and excluded deployment guarantees SHALL follow these rules:
 
 Required configuration, backup, candidate, and setup recovery information SHALL remain in the selected project directory. Setup recovery SHALL run when that root is selected or activated, not depend on a writable user application-data directory. The product SHALL retain one desktop application process and one active project per user session. Execution workers SHALL not concurrently edit `project.easl`; execution results SHALL use existing separate project-local records. Writable project storage on SCRATCH SHALL remain the user's responsibility. This change SHALL NOT claim SLURM scheduling, cross-host file leases, or new process-containment guarantees.
 

@@ -27,6 +27,13 @@ The project phase system SHALL include `visualization` as the fourth phase after
 
 ### Requirement: Visualization Phase Gate
 
+Visualization access SHALL use accepted native saved-cursor and Population eligibility without repeated filesystem probes, while separate active-processing route guards continue to block navigation.
+
+#### Scenario: A saved or current project requests Visualization
+
+- **WHEN** route eligibility and active-work guards evaluate access
+- **THEN** cursor access, Population readiness, and processing lockout SHALL follow these rules:
+
 The native project snapshot SHALL supply `allowedPhases`, and frontend `canAccessPhase` SHALL check membership in that list. Native access SHALL allow the saved/current phase and all earlier phases; visualization SHALL also be allowed as a later phase when `uiState.processing.population?.completed === true`. Thus a saved current phase of visualization or manifest SHALL permit visualization even without Population completion. This gate SHALL use accepted project configuration, not rescan Population output on each route change. Separately, the route guard SHALL block visualization while processing is preparing, running, finalizing, or cancelling, even if `allowedPhases` includes it.
 
 #### Scenario: Access granted after Population completion
@@ -56,6 +63,13 @@ The native project snapshot SHALL supply `allowedPhases`, and frontend `canAcces
 
 ### Requirement: Population Completion Flag
 
+Population completion SHALL derive only from accepted native execution-commit and terminal evidence, preserving prior completion before commit and persisting successful completion before exact acknowledgement.
+
+#### Scenario: Population reservation or execution settles
+
+- **WHEN** native commit or terminal evidence updates project prerequisites
+- **THEN** invalidation, successful completion, and excluded renderer authority SHALL follow these rules:
+
 Population completion SHALL derive only from accepted native run evidence under Exact processing terminal persistence in `processing-store`. An accepted Population execution-commit snapshot SHALL clear `uiState.processing.population.completed`; an accepted Completed terminal result for that committed Population run SHALL set it to `true` and persist it before exact acknowledgement. Rejected reservation or preparation failure before execution commit SHALL preserve prior completion. Renderer worker counts and historical lock reads SHALL NOT establish current-run completion.
 
 #### Scenario: Flag set on Population completion
@@ -84,6 +98,13 @@ Population completion SHALL derive only from accepted native run evidence under 
 - **THEN** `uiState.processing.population.completed` SHALL NOT be cleared
 
 ### Requirement: Stats Directory Runtime Scan
+
+Visualization SHALL discover eligible Population Stats files on mount and focus, distinguish command failures from empty results, and show the specified alert-only presentation without a Processing navigation action.
+
+#### Scenario: Population Stats discovery returns files, emptiness, or failure
+
+- **WHEN** Visualization mounts or the window receives focus
+- **THEN** eligible filenames and empty/error presentation SHALL follow these rules:
 
 The Visualization page SHALL call `list_stats_files` on mount and window focus to discover eligible `.tsv` files in `<root>/derivatives/ExploreASL/Population/Stats/`, restricted to `mean_`, `median_`, and `CoV_` prefixes as defined in `data-vis-contract`. Missing directories and directories with no eligible files SHALL both produce an empty list and the same yellow alert. A command failure SHALL instead show "Population Stats not found. Population may have been modified externally." The alert-only view SHALL NOT include a Processing navigation button.
 
@@ -127,6 +148,13 @@ The navbar SHALL include a "Visualization" entry with `IconChartScatter` icon. T
 - **THEN** the `IconChartScatter` icon SHALL be visible with an accessible label "Visualization"
 
 ### Requirement: Setup Stepper Orchestration
+
+Visualization setup SHALL conditionally include non-identifier level ordering, persist and resume its stage, and validate saved source/join setup through cache-populating native loaders with the existing external fallback policy.
+
+#### Scenario: Visualization initializes or resumes saved setup
+
+- **WHEN** inspection types and saved source/join configuration determine the workflow
+- **THEN** steps, persisted stage, loader selection, and active cache SHALL follow these rules:
 
 The Visualization page SHALL render a Mantine Stepper with fine-grained conditional steps: "Select Data", "Column Types", "Level Ordering" (conditional), and "Visualize". The Level Ordering step SHALL appear only when at least one non-identifier inspection column has a saved type of ordinal or nominal; categorical identifiers alone SHALL NOT create the step. Stepper state SHALL persist in `uiState.dataVis.stage` using `"selectData"` for the first step. On re-entry with a valid contract, the stepper SHALL resume at the persisted stage. Mount-time validation with a saved qCBF source SHALL branch on `joinConfig` presence: if null, it SHALL call `load_qcbf_data`; if active, it SHALL attempt `execute_join`, with unavailable/changed external-source fallback and saved-state preservation as defined in `data-vis-contract`. Both successful data-loading commands SHALL populate `AppState.active_data`.
 

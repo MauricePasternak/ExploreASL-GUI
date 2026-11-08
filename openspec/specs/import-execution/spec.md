@@ -6,6 +6,13 @@ Define execution of the ExploreASL import pipeline from staged source data.
 
 ### Requirement: Mutation-free staging plan preflight
 
+Native import SHALL compile and validate the complete confined staging plan before mutation, using only active-project root authority and revalidating the same portable component and collision contract at launch.
+
+#### Scenario: Import staging is previewed or admitted for execution
+
+- **WHEN** preflight or Run Import receives staging entries
+- **THEN** provenance, ownership, path safety, collisions, errors, and transition authority SHALL satisfy these rules:
+
 Before deleting, creating, linking, copying, or writing anything under `.easl_staging`, the native import boundary SHALL validate every staging entry and expand the complete source-to-destination plan. Every entry SHALL carry original logical Subject/Session/Run provenance and a separate Run alias; provenance SHALL NOT be inferred from source paths. The authoritative checks SHALL include the portable Subject, Session, Run, Run-alias, and Modality component contract; readable file or directory sources; canonical source resolution; exclusion of sources inside the staging tree; canonical staging-root ownership; destination confinement beneath `.easl_staging/sourcedata`; one-to-one original-to-target mappings; and complete portable destination collision detection.
 
 The canonical `AppState.active_project_root` SHALL be the sole project-root authority. Native preflight and Run Import SHALL accept staging entries but SHALL NOT accept a staging-root or project-root candidate; they SHALL derive their only staging root as canonical `<active-root>/.easl_staging` and reject no active root, an existing staging-root symlink, an existing `sourcedata` symlink, or any existing destination-directory-component symlink. An existing leaf-file symlink SHALL be permitted only when it resolves to that file record's exact canonical source; broken links and links to other targets SHALL be rejected. This exception SHALL NOT bypass destination-parent checks or reuse prior staged files: admitted execution SHALL remove the prior staging tree before recreating the compiled plan. Existing destination parents SHALL canonicalize beneath canonical `<active-root>/.easl_staging/sourcedata`, not merely beneath staging. After compilation, cleanup, execution, configuration writes, lock copying, command arguments, process spawn, and import-state ownership SHALL use `CompiledStagingPlan.staging_root`. The plan SHALL reject distinct destination directory spellings that collapse under Unicode NFC normalization and case-insensitive comparison, while permitting multiple source files to intentionally populate one logical directory only when both final Subject/Session/Run/Modality spellings and the original logical Subject/Session/Run tuple are exactly identical. It SHALL reject distinct source files whose final destination filenames collide under the same comparison. Validation SHALL finish for the entire plan before filesystem mutation and SHALL return all detected issues as structured errors with stable codes, affected entry indexes and fields, corrective messages, and conflicting entry indexes where applicable. A read-only preflight operation used by Preview Import and the Run Import operation SHALL apply the same authoritative validator; Run Import SHALL always revalidate rather than trusting an earlier preview result.
@@ -73,6 +80,13 @@ The serialized frontend project transition SHALL set the candidate native active
 - **THEN** native preflight SHALL return a valid complete plan and SHALL permit import preparation to proceed
 
 ### Requirement: Native-owned staging post-processing
+
+Native run ownership SHALL exclusively authorize import staging mutation, verification, relocation, and terminal classification, requiring verified fresh evidence and completed required cleanup rather than renderer or parser claims.
+
+#### Scenario: An owned import run exits and finalizes
+
+- **WHEN** staging or output post-processing occurs for the immutable selected scope
+- **THEN** run identity, lifecycle, verification, cleanup, and outcomes SHALL follow these rules:
 
 Every public operation that mutates import staging, verifies completion, cleans failed status, or relocates import output SHALL derive canonical project and staging roots from the active project and the matching native import run. Caller-supplied roots, result subject lists, frontend progress, persisted UI phase, and parser-only completion events SHALL NOT authorize mutation or success. Retry preservation SHALL accept only a safe subset of subjects verified as committed by the prior terminal run and disjoint from the current selected subject scope.
 
@@ -172,6 +186,13 @@ Finalization SHALL process only subjects from the immutable selected scope. A fa
 
 ### Requirement: Import execution pipeline
 
+Import reservation SHALL durably bind an immutable attempt before staging mutation; exact Preparing-run launch SHALL revalidate, prepare, spawn, and publish authoritative state with race-safe listener attachment.
+
+#### Scenario: An import attempt is reserved and launched
+
+- **WHEN** the frontend reserves a run, attaches listeners, and requests launch
+- **THEN** immutable admission, preparation, rejection, and failure snapshots SHALL follow this sequence:
+
 Import execution SHALL use a native-generated run identity. Reservation SHALL atomically bind the active project, immutable selected subjects, confirmed relocation plan, execution policy, and a durable preparation record before staging mutation. Launch SHALL accept that exact `Preparing` run identity, repeat authoritative staging preflight, rebuild the standardized four-level staging tree, write validated ExploreASL configuration, establish a fresh staging-generation marker and absent selected-subject completion baseline, preserve only authorized unselected locks, spawn the selected execution profile, and return an authoritative run snapshot. Invalid, stale, foreign-project, duplicate, or non-`Preparing` run identities SHALL be rejected without mutating files or another run.
 
 Frontend listener registration SHALL occur after reservation and before launch. Attachment after listener registration SHALL return a fresh snapshot so preparation, launch, or exit that races listener setup cannot be missed. Launch failures after exact admission SHALL be recorded against that run and returned as authoritative failed snapshots.
@@ -232,6 +253,13 @@ Each import execution request SHALL declare a non-empty subject list and SHALL c
 
 ### Requirement: Real-time stdout streaming
 
+Import output SHALL provide run-correlated raw and structured diagnostics without authorizing subject or run completion; the frontend SHALL discard events outside its attached identity.
+
+#### Scenario: Import workers emit stdout or stderr
+
+- **WHEN** parser events or completion text reach the frontend
+- **THEN** identity filtering and provisional-only progress SHALL follow these rules:
+
 The system SHALL stream import stdout and stderr as run-correlated raw and structured events. Subject start, subject completion, parser failure, global completion text, and conversion status SHALL update diagnostics or provisional progress only. Every event SHALL identify the matching native run and ownership generation, and the frontend SHALL discard events that do not match its attached run. No stdout text, including `xASL_module_Import completed 100%`, SHALL independently transition a subject or run to authoritative completion.
 
 #### Scenario: Subject starts processing
@@ -266,6 +294,13 @@ The system SHALL stream import stdout and stderr as run-correlated raw and struc
 
 ### Requirement: Process lifecycle management
 
+Native import shutdown SHALL terminate and settle its supported process scope before project transition, blocking on unconfirmed settlement and retiring prior-project frontend resources only after success.
+
+#### Scenario: Stop or project/application transition requests import shutdown
+
+- **WHEN** an owned import process must stop
+- **THEN** graceful termination, force escalation, reporting, and transition cleanup SHALL follow these rules:
+
 The system SHALL store the active import process scope in native app state; remembered child PIDs SHALL NOT grant termination or recovery authority. User Stop, project close, project switch, and normal app exit SHALL request platform-appropriate graceful termination, wait up to five seconds, then force remaining members of the supported process group or Job Object. Graceful signaling failure SHALL be recorded; successful delivery SHALL only be claimed for validated platform/workload combinations. The shutdown operation SHALL report whether the supported process scope settled. Project close, project switch, and normal app exit SHALL remain blocked if termination cannot be confirmed. A successful project transition SHALL unregister import listeners, cancel queued log batches, and invalidate post-processing owned by the prior project before another project is hydrated.
 
 #### Scenario: User stops import mid-run
@@ -295,6 +330,13 @@ The system SHALL store the active import process scope in native app state; reme
 
 ### Requirement: Lock file cleanup for failed subjects
 
+Only matching native finalization SHALL clean failed selected-subject staging status files after verification, preserving verified subjects and unsafe or unauthoritative evidence.
+
+#### Scenario: Selected subjects fail completion verification after process exit
+
+- **WHEN** native finalization evaluates failed-subject status cleanup
+- **THEN** owned paths, file scope, and deletion authority SHALL follow these rules:
+
 After process exit, native finalization SHALL clean the three staging status files (`010_DCM2NII.status`, `020_NII2BIDS.status`, `999_ready.status`) only for selected subjects that failed authoritative completion verification, under `<owned-staging-root>/derivatives/ExploreASL/lock/xASL_module_Import/<Subject>/xASL_module_Import/`. Cleanup SHALL derive its root and subject scope from the matching native run, reject unsafe entries, and preserve evidence when staging-generation authority is missing. Parser `import_failed` events SHALL NOT independently authorize deletion. No renderer-callable failed-status cleanup command SHALL be exposed. Status files for verified subjects SHALL remain unchanged by failed-subject cleanup.
 
 #### Scenario: One subject fails, one succeeds
@@ -308,6 +350,13 @@ After process exit, native finalization SHALL clean the three staging status fil
 - **THEN** no lock files are deleted
 
 ### Requirement: Confirmed relocation plan integrity
+
+Import SHALL bind a native read-only rawdata replacement plan to its immutable selected scope and reject stale or foreign custody fingerprints before output mutation.
+
+#### Scenario: Replacement inventory is confirmed and later used for relocation
+
+- **WHEN** native import plans or admits rawdata replacement
+- **THEN** disclosed inventory, bound identity, and revalidation SHALL follow these rules:
 
 Before import starts, the system SHALL obtain a native, read-only relocation plan for the immutable selected-subject snapshot. The plan SHALL derive all project and staging roots from native active-project ownership, SHALL identify every existing project-relative rawdata path that a successful relocation would replace, and SHALL include per-subject file counts, byte totals, sessions, and an opaque content fingerprint. Derived import locks, import logs, and BIDS2Legacy locks SHALL NOT participate in the confirmed custody fingerprint. Absolute project paths SHALL NOT be exposed in the user-facing inventory.
 
@@ -330,6 +379,13 @@ Native import ownership SHALL bind the confirmed plan identity and fingerprint t
 
 ### Requirement: Structured relocation outcome
 
+Relocation SHALL report durable per-subject custody and actionable failures, retaining staging and ownership for unresolved work and never presenting incomplete required cleanup as successful import.
+
+#### Scenario: Relocation commits, rolls back, or needs recovery
+
+- **WHEN** relocation returns subject outcomes or considers staging cleanup
+- **THEN** durability, partial-result presentation, and preservation SHALL follow these rules:
+
 Relocation SHALL return a structured outcome that identifies each owned succeeded subject as `committed`, `rolledBack`, or `recoveryRequired` and includes an actionable phase and message for every failure. A subject SHALL NOT be reported as committed until its complete rawdata replacement is durable. A committed subject with pending derived reconciliation SHALL retain committed status and carry a cleanup message. The frontend SHALL surface relocation failures and partial outcomes in import status and logs; it SHALL NOT convert a relocation failure or pending required cleanup into successful import completion or silently discard the error.
 
 Staging cleanup SHALL occur only when every subject expected to relocate is committed and existing cleanup conditions permit it. Any failed or unresolved relocation SHALL retain staging and native ownership for retry, inspection, or recovery. Existing debug-mode staging preservation SHALL remain unchanged.
@@ -350,6 +406,13 @@ Staging cleanup SHALL occur only when every subject expected to relocate is comm
 - **THEN** the frontend SHALL show the affected subject, failure phase, and actionable message and SHALL NOT mark the run fully completed
 
 ### Requirement: Output relocation after import
+
+Native relocation SHALL transactionally replace each verified succeeded subject's complete rawdata tree, preserve unrelated content, reconcile derived import artifacts independently, and retain recoverable evidence until durable custody and cleanup settle.
+
+#### Scenario: Verified staged subjects are installed into project output
+
+- **WHEN** import output relocation processes complete, partial, failed, or interrupted results
+- **THEN** replacement, validation, transaction recovery, dataset description, and staging cleanup SHALL follow these rules:
 
 The native output-relocation operation SHALL replace import output per owned succeeded subject without deleting unrelated project data. For each subject, the staged `rawdata/sub-<Subject>/` SHALL be the complete authoritative replacement for the project `rawdata/sub-<Subject>/`; older sessions and files absent from the staged replacement SHALL NOT be merged forward. After rawdata custody commits, the operation SHALL idempotently reconcile that subject's import-lock directory and matching import logs and remove matching BIDS2Legacy subject-session lock directories. Derived reconciliation SHALL NOT roll back or endanger committed rawdata. Existing Structural, ASL, Population, Stats, `dataPar.json`, `participants.tsv`, non-import lock files, unrelated logs, and unrelated subjects SHALL remain unchanged.
 
@@ -511,6 +574,13 @@ A global setting "Preserve staging directory" SHALL be added to `globalStore.set
 
 ### Requirement: MATLAB executable selection for import
 
+Import execution SHALL use configured execution profiles rather than MATLAB-only selection, binding the selected profile to exact native reservation and disabling Start when no profiles exist.
+
+#### Scenario: Import execution resolves the selected profile
+
+- **WHEN** step 5 displays execution choices or launches a reserved import
+- **THEN** selector replacement, profile resolution, and launch identity SHALL follow these rules:
+
 This requirement is **replaced** by the Profile selector defined in the `execution-profiles` capability spec. The import step 5 execution view SHALL provide an Execution Profile select dropdown (replacing the MATLAB version select dropdown). The dropdown SHALL list all configured execution profiles from `globalStore.settings.executionProfiles`, displaying each profile's label and type. The selection SHALL be stored as `selectedProfileId`. Reservation SHALL bind the selected profile ID; `launch_import_run` SHALL receive the matching typed profile with the exact reserved run identity.
 
 If no execution profiles are configured, the "Start Import" button SHALL be disabled and an alert message SHALL be shown.
@@ -537,6 +607,13 @@ If no execution profiles are configured, the "Start Import" button SHALL be disa
 
 ### Requirement: ImportProgress table population
 
+Import progress SHALL use matching native snapshots while attached, otherwise audit committed artifacts and compute independent configuration staleness; parser events SHALL remain provisional.
+
+#### Scenario: Import progress is initialized or updated
+
+- **WHEN** discovery finds a native run or falls back to committed artifacts
+- **THEN** status authority, Preparing initialization, and staleness SHALL follow these rules:
+
 When discovery finds no active or replayable native run, the progress table SHALL use `read_import_status` to audit committed project artifacts, then compute staleness by diffing current config against `mostRecentConfig`. While a native run is attached, its matching snapshots SHALL determine authoritative status and terminal outcomes.
 
 Run-correlated structured events MAY update provisional running diagnostics, but parser completion SHALL NOT establish completed status. Every selected subject SHALL start pending when its reservation enters Preparing; only verified committed native outcomes or safe committed-artifact audit SHALL establish completion.
@@ -557,6 +634,13 @@ Run-correlated structured events MAY update provisional running diagnostics, but
 - **THEN** `importProgress["GOOD"].status` transitions from "pending" to "running"
 
 ### Requirement: Native phase access
+
+Phase access SHALL use native `allowedPhases`, preserving cursor access and source-specific import and Population readiness without duplicating eligibility in the renderer.
+
+#### Scenario: A project requests navigation to a workflow phase
+
+- **WHEN** native eligibility evaluates the current cursor and readiness flags
+- **THEN** allowed phases SHALL follow this decision contract:
 
 `canAccessPhase(project, targetPhase)` SHALL check the native `allowedPhases` list. Native phase eligibility SHALL use:
 
@@ -608,6 +692,13 @@ When `uiState.import.bidsReviewConfirmed = true` and user revisits Import on a B
 
 ### Requirement: Authoritative import run snapshot
 
+Native state SHALL own at most one current import identity and lifecycle with immutable scope, evidence, outcomes, and errors, exposing camelCase snapshots without absolute project paths.
+
+#### Scenario: A current import run is exposed to the renderer
+
+- **WHEN** a run snapshot or lifecycle event is published
+- **THEN** fields and excluded sources of authority SHALL satisfy this contract:
+
 Native state SHALL own at most one current import run containing a session-unique `runId`, canonical project ownership, immutable selected subjects, lifecycle, start and update times, execution profile identity, ownership generation, per-subject evidence and outcome, process-exit evidence, relocation outcome, structured errors, and terminal result. Snapshots and lifecycle events SHALL use camelCase fields and SHALL not expose absolute project paths. Frontend PID caches, listener presence, parser state, and persisted project UI fields SHALL NOT be authoritative run identity or lifecycle sources.
 
 #### Scenario: Current run is queried
@@ -626,6 +717,13 @@ Native state SHALL own at most one current import run containing a session-uniqu
 - **THEN** native code SHALL reject attachment without revealing absolute path data or mutating either project
 
 ### Requirement: Fresh import completion verification
+
+Selected-subject completion SHALL require fresh regular owned-generation ready evidence and nonempty staged rawdata, never stale retry artifacts or unsafe filesystem entries.
+
+#### Scenario: Finalization verifies a selected subject's completion
+
+- **WHEN** native import evaluates ready artifacts before relocation
+- **THEN** freshness, ownership, rawdata, and rejection SHALL follow these rules:
 
 For each selected subject, native finalization SHALL verify a regular, non-symlink `999_ready.status` under the canonically owned staging lock directory, prove that it belongs to the current rebuilt staging generation and was absent before launch, and require the nonempty staged subject rawdata needed by relocation. Completion artifacts copied for unselected retry subjects SHALL never satisfy a selected subject. Missing, stale, malformed, symlinked, escaping, or wrong-generation evidence SHALL fail that subject without deleting project output.
 
@@ -650,6 +748,13 @@ For each selected subject, native finalization SHALL verify a regular, non-symli
 - **THEN** that subject and the run SHALL fail before its project destination changes
 
 ### Requirement: Durable finalization and terminal replay
+
+Import SHALL persist admitted attempt evidence before mutation, exit evidence before finalization, and terminal results before presentation, retaining exact replay and recovery checkpoints until safe native reconciliation and acknowledgement.
+
+#### Scenario: Import finalization persists, resumes, or replays
+
+- **WHEN** an import exits, recovers, or reconciles its terminal result
+- **THEN** durability order, historical compatibility, and checkpoint reuse SHALL follow these rules:
 
 Before staging mutation, native code SHALL durably record project-local run identity, relative ownership/plan evidence, and the admitted attempt configuration needed for its successful freshness baseline. Exit evidence SHALL persist before finalization authority and terminal outcome before presentation. Remembered PIDs SHALL not authorize recovery after native restart.
 
@@ -694,6 +799,13 @@ Relocation recovery SHALL checkpoint authoritative custody into the matching run
 
 ### Requirement: In-process import supervision
 
+Import SHALL use native in-process POSIX process groups or Windows Job Objects with concurrent transient output draining, preserving import-specific finalization and honest abnormal-interruption recovery without guardian infrastructure.
+
+#### Scenario: Renderer or native lifetime changes during import
+
+- **WHEN** native import supervises workers and drains their output
+- **THEN** platform scopes, renderer independence, and excluded guardian authority SHALL follow these rules:
+
 Import SHALL use the same native in-process process-scope mechanism as processing while retaining import-specific verification, relocation, cancellation, supported import-run-record compatibility, and terminal replay. Linux and macOS SHALL use POSIX process groups; Windows SHALL use Job Objects. Renderer death SHALL NOT stop native import completion. Native process death SHALL follow Honest abnormal-interruption recovery and SHALL NOT trigger persisted-PID adoption.
 
 Import stdout and stderr SHALL be drained concurrently into the existing parser and run-correlated event path. Captured output SHALL remain transient; no guardian spool, diagnostic-capacity authority, retention receipt, or durable quiescence record SHALL be created.
@@ -709,6 +821,13 @@ Import stdout and stderr SHALL be drained concurrently into the existing parser 
 - **THEN** both streams SHALL continue draining without pipe deadlock and parser events SHALL remain correlated to the exact import run
 
 ### Requirement: Interrupted import requires confirmation
+
+Ownerless active import records SHALL become Interrupted and block new execution until explicit external-stop confirmation, preserving evidence and rejecting unsupported guardian or relocation-journal formats without mutation.
+
+#### Scenario: Import records are reopened without live in-process ownership
+
+- **WHEN** import recovery encounters interrupted or incompatible records
+- **THEN** confirmation, evidence preservation, and compatibility SHALL follow these rules:
 
 An import record found in Preparing, Running, or Cancelling without matching in-process ownership SHALL become Interrupted and preserve staging, captured domain evidence, verified commits, and relocation state. Project viewing MAY continue, but import and processing admission SHALL remain blocked until the user confirms the external worker has stopped. Confirmation SHALL NOT signal a persisted PID and SHALL NOT infer successful import.
 

@@ -44,9 +44,7 @@ function StepIcon({ status }: { status: StepStatus["status"] }) {
         <IconCheck size={14} color="var(--mantine-color-blue-6)" data-testid="step-complete" />
       );
     case "running":
-      return (
-        <Loader size={14} color="pink" data-testid="step-running" />
-      );
+      return <Loader size={14} color="pink" data-testid="step-running" />;
     case "pending":
     default:
       return (

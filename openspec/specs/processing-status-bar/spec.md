@@ -8,6 +8,13 @@ Define the global status indicator for active and completed processing.
 
 ### Requirement: Global Processing Status Indicator
 
+The project footer SHALL show noninteractive per-module distinct subject/session completion counts for every non-idle phase, using any-complete-row semantics without lifecycle labels or accents.
+
+#### Scenario: Global processing progress is projected into the footer
+
+- **WHEN** processing phase or subject-module statuses change
+- **THEN** visibility, ordering, missing identifiers, counting, and interaction SHALL follow these rules:
+
 The Layout component SHALL render `ProcessingStatusBar` in the project footer. The indicator SHALL be hidden only when `processingPhase` is `idle`. For other phases it SHALL show progress counts for modules present in `subjectStatuses`, ordered Structural, ASL, Population. Each count SHALL use distinct subject/session identifiers within that module; missing identifiers, including subjectless Population rows, SHALL share one empty identifier. An identifier SHALL count as complete when any corresponding row has status `complete`, not only when all ASL runs are complete. The display SHALL use text such as "Structural 3/5 · ASL 2/5" without a phase label or phase-specific accent. The indicator SHALL be noninteractive and SHALL NOT navigate on click.
 
 #### Scenario: Active processing indicator

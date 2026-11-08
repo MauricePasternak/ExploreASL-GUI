@@ -60,6 +60,13 @@ The header SHALL support inline display-name editing through an accessible penci
 
 ### Requirement: Project gating on valid profiles
 
+Project creation and opening SHALL require a valid profile from global validation state, preserving Settings guidance, first-run onboarding, and removal of recent entries when execution is unavailable.
+
+#### Scenario: Project actions evaluate configured profile validity
+
+- **WHEN** creation, opening, or landing-page project controls require a valid profile
+- **THEN** blocking, guidance, onboarding, and remaining actions SHALL follow these rules:
+
 The project store's `createProject` and `loadProject` actions SHALL check that at least one valid execution profile exists before proceeding. Validity SHALL be determined from the global store's `profileValidationState`.
 
 If no valid profiles exist:
@@ -119,6 +126,13 @@ When a new project is created, the Import phase SHALL initialize `selectedProfil
 
 ### Requirement: createProject accepts dataSource
 
+Project creation SHALL require explicit DICOM or BIDS source kind, initialize the Import phase, and keep the established source kind outside subsequent native project edits.
+
+#### Scenario: A caller creates a project with source options
+
+- **WHEN** `createProject` receives a present or missing `dataSource`
+- **THEN** validation, initialization, and later editability SHALL follow these rules:
+
 `createProject(path, name, options)` SHALL accept `options.dataSource: "dicom" | "bids"` (required — no default). The function MUST NOT silently default `dataSource` to `"dicom"` if the parameter is omitted; a missing `dataSource` SHALL throw a validation error.
 
 `createProject` SHALL set `projectMeta.dataSource` from this parameter. `projectMeta.currentPhase` SHALL be set to `"import"` regardless of `dataSource` (both paths land on Import page; both advance to Parameters on completion).
@@ -147,6 +161,13 @@ When a new project is created, the Import phase SHALL initialize `selectedProfil
 
 ### Requirement: BIDS review confirm writes to mappingState
 
+BIDS review confirmation SHALL validate groups and accept portable group/subject-session mappings and import UI state, flushing configuration before Parameters navigation and preserving accepted state on failure.
+
+#### Scenario: Reviewed BIDS metadata is confirmed in the project store
+
+- **WHEN** the user submits detected groups for native confirmation
+- **THEN** labels, row derivation, persisted fields, and navigation SHALL follow these rules:
+
 Confirmed BIDS review SHALL require detected groups with nonempty, case-insensitively unique labels. It SHALL derive metadata groups and one SubjectRow per subject/session pair, merging duplicate subject entries, stripping `sub-` for the subject value, and retaining IDs compatible with native subject listing. Accepted `mappingState` SHALL contain only metadata groups, subject rows, `ingestionComplete: true`, and `sourceDataPath: "."`. Skipped subjects and review confirmation SHALL persist under import UI state. Current phase SHALL advance to Parameters and configuration SHALL flush before navigation. Empty groups, invalid labels, or failed persistence SHALL not navigate or replace accepted mappings.
 
 #### Scenario: BIDS confirm populates mappingState and persists uiState
@@ -155,6 +176,13 @@ Confirmed BIDS review SHALL require detected groups with nonempty, case-insensit
 - **THEN** 24 subject rows, both groups, the skipped list, confirmation, portable BIDS source, and Parameters phase SHALL persist before navigation
 
 ### Requirement: Project Dialog Default Directory Paths
+
+Project pickers SHALL prefer existing recent-project locations and otherwise the user's home directory, with directory and file dialogs using their specified fallback order.
+
+#### Scenario: A New Project or Open Project picker initializes
+
+- **WHEN** the landing page opens a native project dialog
+- **THEN** its initial `defaultPath` SHALL follow this priority:
 
 The "New Project" and "Open Project" dialogs on the landing page SHALL use the following logic to determine their initial opening directory (`defaultPath`):
 
@@ -188,6 +216,13 @@ Sibling temporary files left by interrupted saves SHALL NOT be treated as author
 - **THEN** project opening SHALL continue and the cleanup failure SHALL be logged
 
 ### Requirement: Actionable storage errors and durability reporting
+
+Project persistence SHALL expose actionable categorized failures without sensitive contents, require file flushing, and distinguish unsupported directory synchronization from uncertain supported post-replacement durability.
+
+#### Scenario: Project writing encounters storage or directory-flush outcomes
+
+- **WHEN** a configuration save succeeds, fails, or cannot fully establish durability
+- **THEN** categories, logging, warnings, and dirty-state retention SHALL follow these rules:
 
 Project persistence SHALL distinguish invalid serialization, permission denial, insufficient disk space, temporary write failure, file flush failure, backup failure, primary replacement failure, uncertain post-replacement durability, and recovery failure. Callers SHALL receive an actionable category without exposing sensitive project contents.
 
@@ -238,6 +273,13 @@ Project creation, opening, editing, autosaving, explicit saving, backup recovery
 
 ### Requirement: Project-wide autosave
 
+Accepted edits SHALL autosave after two seconds of inactivity across pages, while explicit flush boundaries submit valid pending drafts and await persistence without saving transient or no-op changes.
+
+#### Scenario: Accepted edits or workflow boundaries request persistence
+
+- **WHEN** edits settle, relinking confirms, or Save/navigation/execution/close flushes configuration
+- **THEN** autosave scheduling, draft validation, and no-op handling SHALL follow these rules:
+
 Every accepted configuration edit SHALL schedule an autosave after two seconds without another accepted edit. Autosave SHALL remain active independently of the displayed page. Save, processing/import submission, phase navigation, project replacement, and ordinary close SHALL submit pending form changes and wait for the latest accepted configuration to persist. Invalid unfinished input SHALL remain a visible draft and SHALL block a requested flush until corrected; it SHALL NOT replace accepted values with defaults. No-op edits and transient progress, logs, images, or chart selection SHALL NOT schedule configuration writes. Confirmed relinking SHALL use this same save policy.
 
 #### Scenario: Parameter edit precedes immediate navigation
@@ -262,6 +304,13 @@ Every accepted configuration edit SHALL schedule an autosave after two seconds w
 
 ### Requirement: Current schema persisted and runtime boundaries
 
+Schema version 2 SHALL separate accepted portable configuration from runtime state, preserve declared loose scientific extensions and sparse optional fields, and initialize native scalar choices only at new-project creation or explicit acceptance.
+
+#### Scenario: Current project configuration is created, inspected, or serialized
+
+- **WHEN** state crosses the current project persistence boundary
+- **THEN** schema fields, runtime-root authority, defaults, extension preservation, and compatibility SHALL follow these rules:
+
 The only supported project schema SHALL declare integer `schemaVersion: 2`, independently of application SemVer. Saved configuration SHALL retain the current top-level `projectMeta`, `mappingState`, `dataPar`, and `uiState` sections, SHALL omit legacy `version` and runtime `rootPath`, and SHALL contain no transient run ownership, loaded scientific data, or form drafts. The runtime root SHALL derive exclusively from the parent of the opened `project.easl`. Closed project-owned objects SHALL reject unknown fields. Declared loose scientific metadata and DataPar extension fields SHALL preserve unknown JSON values. Missing optional settings in existing projects SHALL remain unset during inspection, opening, ordinary save and unrelated edits; equivalent absent nullable selections SHALL serialize consistently as `null`. New-project creation alone SHALL initialize the 25 scalar switch choices from the native-owned policy described in Authoritative scalar switches, leaving selectors, numeric/text fields, arrays and hidden SkipIfNo fields optional. General DataPar defaults and parsing SHALL remain sparse; no schema bump or migration SHALL be introduced. Explicit confirmation of missing choices SHALL use the existing Parameters edit and shared persistence lifecycle.
 
 #### Scenario: Current project is saved
@@ -275,6 +324,13 @@ The only supported project schema SHALL declare integer `schemaVersion: 2`, inde
 - **THEN** save and reopen SHALL preserve those values without treating them as project-schema extensions
 
 ### Requirement: Current processing selection persistence
+
+Processing and import selections SHALL persist by profile reference without replacing independent native results; native phase eligibility SHALL preserve valid saved cursors and remain separate from active-work guards and local readiness.
+
+#### Scenario: Selections, accepted results, or the saved phase cursor are persisted
+
+- **WHEN** project configuration is saved or its allowed phases are projected
+- **THEN** field placement, sibling preservation, lazy defaults, and eligibility SHALL follow these rules:
 
 Processing selections SHALL persist under `uiState.processing.config`, using `selectedProfileId` rather than copied MATLAB or ExploreASL paths. Import profile selection SHALL persist under `uiState.import.selectedProfileId`. Persisted terminal phase and module completion/provenance SHALL derive from accepted native execution evidence; nonterminal progress SHALL remain runtime state. Changing selections SHALL preserve sibling `structural`, `asl`, and `population` results, including `profileId`, `exploreASLVersion`, `matlabVersion`, `guiVersion`, and `Mtime`. A new project SHALL create processing selections lazily on the first Processing visit. Visualization and review configuration SHALL follow their current capability contracts.
 
@@ -384,6 +440,13 @@ Reading a current configuration, deriving its root, inspecting source availabili
 
 ### Requirement: Validated current project writes
 
+All project writes SHALL validate before creating project-local durable candidates, preserve the previous validated primary as backup, and prevent malformed or unsupported data from replacing valid recovery evidence.
+
+#### Scenario: Creation, autosave, Save, or recovered-primary repair writes configuration
+
+- **WHEN** the durable project writer accepts current state
+- **THEN** validation, candidate creation, backup, and atomic installation SHALL follow these rules:
+
 Every creation, autosave, explicit Save, and repair of a recovered primary SHALL validate and serialize the current configuration before filesystem writes. The existing durable writer SHALL create a unique sibling candidate, flush its contents, preserve the previous validated primary as `project.easl.bak`, and atomically install the new primary. All candidates and backups SHALL remain in the project directory. Missing, malformed, or unsupported primary data SHALL NOT replace a valid recovery backup. Invalid values SHALL cause failure before candidates are created.
 
 #### Scenario: Existing project is saved atomically
@@ -466,6 +529,13 @@ Configuration writes SHALL execute in accepted revision order for the active lif
 
 ### Requirement: Current portable source references
 
+Accepted source references SHALL distinguish project-relative internal sources from absolute external sources, resolving only within the current root and rejecting traversal or symlink escape without legacy load-time repair.
+
+#### Scenario: Sources are selected, relinked, persisted, or resolved
+
+- **WHEN** current source configuration crosses acceptance or runtime resolution
+- **THEN** BIDS, DICOM, qCBF, and external path representations SHALL follow these rules:
+
 Current output SHALL store project-internal sources relative to the project root and external sources as explicit absolute paths. Raw DICOM entries SHALL remain relative to their source. BIDS source SHALL be `.`; generated qCBF paths SHALL be project-relative. Runtime resolution SHALL use the currently opened root and SHALL reject relative traversal or symlink escape. Selecting or relinking a source SHALL establish this representation before acceptance; loading SHALL NOT repair older absolute internal-path conventions.
 
 #### Scenario: BIDS project is moved
@@ -489,6 +559,13 @@ Current output SHALL store project-internal sources relative to the project root
 - **THEN** validation SHALL reject it without accessing that escaped location
 
 ### Requirement: Native-owned project creation planning
+
+Reviewed BIDS-root setup SHALL use exact native-generated validated project bytes, commit compatibility artifacts together, and publish configuration only after successful commit without follow-up frontend writes.
+
+#### Scenario: A detected BIDS root is created through reviewed setup
+
+- **WHEN** a native plan is generated, confirmed, and activated
+- **THEN** defaults, exact bytes, transaction ownership, and later persistence SHALL follow these rules:
 
 For a detected BIDS root, project defaults, validation, and current JSON generation SHALL belong to the same native configuration contract used by normal saves. The reviewed setup plan SHALL retain those exact bytes. Confirmation SHALL commit project and compatibility artifacts together; no independent frontend project write or best-effort ignore-file write SHALL follow. Activation SHALL expose the committed configuration only after successful commit. Later edits SHALL use the shared validated project writer.
 

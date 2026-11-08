@@ -8,6 +8,13 @@ Define manifest preview presentation and export behavior.
 
 ### Requirement: Manifest Preview Accordion Layout
 
+Manifest preview SHALL use separated, independently collapsible accordion panels, all initially open, adding Inter-Rater Agreement only for multi-reviewer mode in the specified order.
+
+#### Scenario: Preview initializes its accordion panels
+
+- **WHEN** a single- or multi-reviewer manifest preview first renders
+- **THEN** panel count, order, and initial expansion SHALL follow these rules:
+
 The manifest preview SHALL render all sections inside a Mantine `Accordion` with `multiple` and `variant="separated"`. Single-reviewer mode SHALL contain four panels: Study Parameters, Software Manifest, QC Summary, and Pipeline Summary. Multi-reviewer mode SHALL contain five panels: Study Parameters, Software Manifest, QC Summary, Inter-Rater Agreement, and Pipeline Summary. Inter-Rater Agreement SHALL appear between QC Summary and Pipeline Summary. All rendered panels SHALL default open so full content is visible on first render; users MAY collapse individual panels.
 
 #### Scenario: Accordion layout defaults to all open
@@ -46,6 +53,13 @@ Preview/export SHALL use SubjectSession resolution when present, otherwise unani
 
 ### Requirement: Manifest Section 1 Study Parameters
 
+Study Parameters SHALL show assignment-based group inventory counts and stored metadata with the specified conditional omissions and array/context formatting, distinguishing participants, visits, and runs.
+
+#### Scenario: Group inventory and acquisition parameters are summarized
+
+- **WHEN** Study Parameters renders imported metadata groups
+- **THEN** counting units, membership scope, omitted fields, and display formatting SHALL follow these rules:
+
 The manifest preview SHALL render a "Study Parameters" section. For each `MetadataGroup` defined in the project's import snapshot, the section SHALL render one table with the group's `label` as a subheading and rows containing:
 
 - N Participants (unique `SubjectInfo.subject` identities among assigned inventory entries, with an optional leading `sub-` removed)
@@ -80,6 +94,13 @@ Subject-sessions SHALL mean participant visits (GUI/BIDS Sessions, ExploreASL Vi
 The same Ungrouped membership SHALL apply to QC Summary and inter-rater agreement in preview and exports, consistent with QC Selection.
 
 ### Requirement: Manifest Section 2 Software Manifest
+
+Software Manifest SHALL display recorded-version precedence with labeled current fallbacks and available processing configuration using shared semantics-preserving path redaction, without claiming an immutable execution snapshot.
+
+#### Scenario: Software versions and available configuration are presented
+
+- **WHEN** Software Manifest renders recorded values and fallback sources
+- **THEN** version precedence, configuration source, redaction, and disclosure SHALL follow these rules:
 
 The preview SHALL render a "Software Manifest" section containing two sub-sections with `Title order={5}` sub-headings:
 
@@ -136,6 +157,13 @@ A spec-level reservation SHALL note that human-readable label translation of `da
 
 ### Requirement: Manifest Section 3 Qc Summary
 
+QC Summary SHALL aggregate eligible final verdicts and metric-specific final-Pass subject-session values, displaying sample SD, contributing counts, and reviewer-mode agreement without collapsing repeated visits.
+
+#### Scenario: Final verdicts and available QC metrics are summarized
+
+- **WHEN** preview or document export builds per-group QC tables
+- **THEN** eligibility, aggregation, units, missing values, and numeric formatting SHALL follow these rules:
+
 The preview SHALL render a "QC Summary" section. For each `MetadataGroup` with an eligible final verdict, the section SHALL render a subheading and a table with rows:
 
 - Metadata group name (group `label`)
@@ -190,6 +218,13 @@ In multi-reviewer mode, each per-group QC Summary table SHALL include an Initial
 
 ### Requirement: Inter-Rater Agreement Section
 
+Multi-reviewer preview SHALL display an agreement panel with the specified overall and per-group rates, Kappa intervals, subject-session counts, and interpretation guidance, omitting it for one reviewer.
+
+#### Scenario: Preview formats multi-reviewer agreement
+
+- **WHEN** the agreement section is rendered
+- **THEN** tables, count units, undefined values, and guidance SHALL follow these rules:
+
 In multi-reviewer mode, preview SHALL render an "Inter-Rater Agreement" accordion panel between QC Summary and Pipeline Summary. Its overall table SHALL show Number of Reviewers, Overall Initial Agreement Rate formatted as `"N% (agreed/total)"`, Cohen's Kappa for exactly two reviewers or Fleiss' Kappa for more reviewers with unclamped 95% confidence interval formatted as `"κ = 0.82 [0.71, 0.90]"`, Number of Subject-Sessions, and Subject-Sessions Requiring Resolution. A per-group table SHALL show group label, n (subject-sessions), Initial Agreement Rate formatted as `"N% (agreed/total)"`, and Kappa with CI or `"N/A"` when undefined. These counts SHALL retain the existing eligible, completely rated SubjectSession units, not unique participants. The QC Summary's Initial Agreement Rate SHALL remain percentage-only.
 
 Below the tables, the section SHALL display: `Initial agreement is unadjusted. Kappa adjusts for agreement expected from each reviewer's pass/fail frequencies; interpret kappa and its confidence interval cautiously with small subject-session counts.` The entire section SHALL be omitted in single-reviewer mode.
@@ -215,6 +250,13 @@ Below the tables, the section SHALL display: `Initial agreement is unadjusted. K
 - **THEN** Cohen's Kappa SHALL be used; with three or more reviewers, Fleiss' Kappa SHALL be used
 
 ### Requirement: Manifest Section 4 Pipeline Summary Paragraph
+
+Pipeline Summary SHALL introduce globally deduplicated participants, included subject-sessions, and covered groups with correct pluralization, leaving scientific processing descriptions to Methods.
+
+#### Scenario: Pipeline Summary introduces manifest coverage
+
+- **WHEN** included inventory is summarized
+- **THEN** counts, Ungrouped handling, and excluded narrative SHALL follow these rules:
 
 The preview SHALL render a "Pipeline Summary" section with an opening paragraph stating the number of unique participants, included subject-sessions, and groups covered by the manifest. The paragraph SHALL use correct singular and plural forms. It SHALL substitute:
 
@@ -248,6 +290,13 @@ The opening paragraph SHALL NOT repeat execution-evidence qualifications or desc
 - **THEN** the opening Pipeline Summary paragraphs SHALL be identical with the same counts, while Methods SHALL reflect the corresponding processing choices
 
 ### Requirement: Methods And References Subsections
+
+One shared generator SHALL produce source-supported Methods, a separate verification disclaimer, and unique sorted references for preview and document exports, preserving parameter semantics and omitting invented scientific claims.
+
+#### Scenario: Available processing configuration generates Methods and References
+
+- **WHEN** preview, Markdown, or HTML generates the processing narrative
+- **THEN** paragraph order, defaults, scientific meanings, redaction, and missing-configuration behavior SHALL follow these rules:
 
 Preview, Markdown, and HTML SHALL show Methods and References subsections under Pipeline Summary when their respective generated lists are nonempty. One shared generator SHALL produce the Methods paragraphs, a separate disclaimer, and sorted unique references for all formats.
 
@@ -294,6 +343,13 @@ Descriptions SHALL respect supported parameter meanings: numeric M0 is scalar ca
 
 ### Requirement: Methods inclusion and exclusion rules
 
+Methods SHALL describe configured initial selection and separate Structural skip rules with operative precedence and defaults, without evaluating cohort counts or inventing unsupported skip options.
+
+#### Scenario: Methods describes dataset selection and Structural prerequisites
+
+- **WHEN** inclusion, exclusion, and SkipIfNo settings are narrated
+- **THEN** precedence, preserved identifiers, default behavior, and interpretation limits SHALL follow these rules:
+
 The inclusion paragraph SHALL describe initial dataset selection and the separate Structural module skip rules. `ForceInclusionList`, when present, SHALL take precedence over `subjectRegexp` for initial selection. Exact `exclusion` identifiers SHALL apply afterward. The default selection expression SHALL be `^sub-.*$`. The generator SHALL preserve supplied expressions and identifiers without evaluating the regex or calculating cohort sizes.
 
 The operative `SkipIfNoASL`, `SkipIfNoFlair`, and `SkipIfNoM0` flags SHALL default off. An enabled flag SHALL describe skipping Structural processing for a participant visit when the corresponding resolved input image is absent. It SHALL NOT describe cohort-wide exclusion, checking every ASL run, or a guarantee of successful processing when a skip flag is disabled. Missing T1w SHALL be described as a Structural skip condition without inventing a `SkipIfNoT1` option. Unsupported aliases SHALL NOT acquire behavior. No inventory scans or affected-scan counts SHALL be required.
@@ -309,6 +365,13 @@ The operative `SkipIfNoASL`, `SkipIfNoFlair`, and `SkipIfNoM0` flags SHALL defau
 - **THEN** their supported selection roles SHALL appear in the inclusion paragraph without replacing their values or calculating a resulting cohort size
 
 ### Requirement: Methods Population extraction description
+
+Population Methods SHALL describe indexed extraction choices and operative defaults, units, masks, and WMH handling without repairing mismatched arrays or implying unsupported extraction behavior.
+
+#### Scenario: Methods describes Population ROI extraction
+
+- **WHEN** image, atlas, tissue, threshold, masking, and WMH settings are narrated
+- **THEN** indexed choices, absent-versus-empty defaults, and scientific distinctions SHALL follow these rules:
 
 The Population paragraph SHALL describe image types, atlases, tissues, thresholds, masking, WMH inclusion, and minimum ROI volume according to their operative extraction settings. Each atlas, tissue, and threshold at the same index SHALL define one extraction choice. Duplicate atlas entries SHALL remain separate when their tissues or thresholds differ. Selected image types SHALL apply to these choices as the source's outer loop. Atlas display labels SHALL use the existing label map where available. Mismatched selection arrays SHALL NOT be silently repaired or described as a valid extraction list.
 
@@ -342,6 +405,13 @@ The preview SHALL update live when the user navigates back to QC Selection, chan
 - **THEN** the Inter-Rater Agreement section SHALL reflect updated agreement and Kappa values on return
 
 ### Requirement: Markdown And HTML Export
+
+Markdown and HTML exports SHALL serialize the manifest through native save dialogs with deterministic content, reviewer-mode agreement, shared path redaction, and self-contained HTML rather than WebView printing.
+
+#### Scenario: A user exports the manifest as Markdown or HTML
+
+- **WHEN** the corresponding export button is enabled and selected
+- **THEN** writing, formatting, reviewer statistics, redaction, and format-specific presentation SHALL follow these rules:
 
 The preview SHALL expose "Export Markdown" and "Export HTML" buttons. Clicking either SHALL open a Tauri save dialog and write the formatted manifest file at the chosen path. Both formats SHALL be byte-identical across Windows 11, macOS, and Linux for the same input state.
 
@@ -393,6 +463,13 @@ A spec-level reservation SHALL note that a "Export PDF" button is a future expan
 
 ### Requirement: CSV Export
 
+Manifest preview SHALL offer native UTF-8 CSV export using the authoritative CSV capability's mode-specific columns and escaping, disabled when no verdict exists.
+
+#### Scenario: A user exports the manifest as CSV
+
+- **WHEN** CSV export is displayed or selected for the current reviewer mode
+- **THEN** button placement, output schema, and disabled state SHALL follow these rules:
+
 The preview SHALL expose an "Export CSV" button after "Export Markdown" and "Export HTML". Clicking it SHALL open a Tauri save dialog and write UTF-8 CSV. The `manifest-csv-export` capability is authoritative for exact content, mode-specific columns, QC metric names, agreement statistics, escaping, and `\n` line endings.
 
 Multi-reviewer columns SHALL be `SubjectSession`; registry-ordered `Reviewer_N_Verdict`, `Reviewer_N_Reason`, and `Reviewer_N_Notes` triplets; `Final_Verdict`; `Resolution_Notes`; `Coverage_Pct`; `SpatialCoV`; `Motion_mm`; and `Motion_Exclusion_Pct`. Single-reviewer columns SHALL be `SubjectSession`, `Verdict`, `Reason`, `Notes`, `Coverage_Pct`, `SpatialCoV`, `Motion_mm`, and `Motion_Exclusion_Pct`. Single-reviewer CSV SHALL contain no final/resolution/per-reviewer columns or agreement section. The button SHALL be disabled when no verdict exists.
@@ -413,6 +490,13 @@ Multi-reviewer columns SHALL be `SubjectSession`; registry-ordered `Reviewer_N_V
 - **THEN** its header SHALL be `SubjectSession,Verdict,Reason,Notes,Coverage_Pct,SpatialCoV,Motion_mm,Motion_Exclusion_Pct` and no agreement section SHALL appear
 
 ### Requirement: ManifestPreview uses summarizeAslContext for ASLContext display
+
+Study Parameters SHALL summarize ASL context for display only, preserving raw persisted metadata and existing raw-field iteration and conditional omissions.
+
+#### Scenario: Study Parameters renders stored ASL context
+
+- **WHEN** `ManifestPreview` encounters the `ASLContext` metadata key
+- **THEN** display-only transformation and unchanged persistence SHALL follow these rules:
 
 `ManifestPreview.tsx` §1 study parameters table SHALL render `summarizeAslContext(group.bidsParams.ASLContext)` instead of the raw ASLContext string when displaying the `ASLContext` field. Raw ASLContext persists in `mappingState.bidsParams.ASLContext` (per `metadata-grouping-ui` spec) — the summary form is display-only.
 

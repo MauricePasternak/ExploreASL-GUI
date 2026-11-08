@@ -8,6 +8,13 @@ Define scanning and interpretation of BIDS ASL sidecar metadata.
 
 ### Requirement: parse_bids_structure scans any path containing sub-\* directories
 
+`parse_bids_structure` SHALL enumerate top-level BIDS subjects and cross-sectional or longitudinal sessions at its supplied root, ignoring unrelated directories and leaving root selection to callers.
+
+#### Scenario: A caller supplies a BIDS subject root
+
+- **WHEN** `parse_bids_structure` scans a project root or DICOM `rawdata` root
+- **THEN** supported layouts, caller paths, and exclusions SHALL follow these rules:
+
 `bids::scan::parse_bids_structure(bids_root: &Path) -> Result<Vec<BidsSubject>>` SHALL enumerate `sub-*/` directories at the top level of `bids_root`. It handles two layouts:
 
 - Cross-sectional: `sub-XX/perf/`, `sub-XX/anat/` directly (no intermediate `ses-*/`)
@@ -68,6 +75,13 @@ Non-`sub-` top-level entries (`derivatives/`, `sourcedata/`, `.easl_staging/`, `
 
 ### Requirement: Image-owned metadata discovery
 
+Metadata discovery SHALL resolve applicable JSON and nearest context independently per image through its selected root, rejecting same-level ambiguity and preserving top-level inheritance precedence.
+
+#### Scenario: Applicable metadata is discovered for an ASL image
+
+- **WHEN** an image's directory and ancestors are inspected
+- **THEN** association, merging, and traversal SHALL follow these rules:
+
 `discover_metadata` SHALL resolve metadata separately for each ASL image by inspecting its directory and ancestors through the selected root. Applicable `_asl.json` and `_aslcontext.tsv` filenames have matching entity pairs that are a subset of the image's entities. More than one applicable file of either type at one level is an error. JSON files are merged root-to-image, with nearer top-level values replacing earlier values; context uses the nearest applicable file.
 
 Subject discovery does not traverse unrelated top-level directories such as `derivatives/` or `sourcedata/`.
@@ -83,6 +97,13 @@ Subject discovery does not traverse unrelated top-level directories such as `der
 - **THEN** each image uses applicable metadata from its own ancestor chain
 
 ### Requirement: Sidecar extraction reads top-level keys only
+
+Fingerprint extraction SHALL use the specified top-level effective metadata fields, treating absent values as null, excluding ASL context, and applying derived M0 type.
+
+#### Scenario: Effective inherited JSON is fingerprinted
+
+- **WHEN** `extract_fingerprint` receives an acquisition's inherited sidecar JSON
+- **THEN** field selection and missing-value behavior SHALL satisfy this contract:
 
 `bids::sidecar::extract_fingerprint(sidecar: &serde_json::Value)` SHALL read top-level keys of the effective inherited JSON. Nested objects — notably dcm2niiX's `global.const` block — are ignored. Keys absent at top-level are treated as null in the fingerprint (two subjects both missing the field → match).
 
@@ -119,6 +140,13 @@ Arrays in fingerprint fields SHALL preserve their original order and multiplicit
 
 ### Requirement: Group metadata does not assert differing member values
 
+Group metadata SHALL contain only common validated acquisition values; fingerprint normalization SHALL not imply scientific equivalence or hide invalid metadata.
+
+#### Scenario: Acquisitions are validated and projected into group metadata
+
+- **WHEN** acquisitions share a fingerprint but may differ in raw values
+- **THEN** validation, common-value projection, and raw-value preservation SHALL follow these rules:
+
 Group `bids_params` SHALL project only raw sidecar values present and equal across every contributing acquisition. If rounding or descriptive normalization allows differing raw values into one fingerprint group, the differing sidecar fields SHALL be omitted rather than copied from the first acquisition. Derived `M0Type` remains the common derived value; parsed `ASLContext` SHALL likewise be projected only when equal across every contributing acquisition. Fingerprint equality is a grouping rule, not evidence of scientific or numerical equivalence.
 
 Before fingerprinting and common-value projection, each acquisition's projected metadata SHALL pass the existing native typed metadata parsing and domain validation, including context tokens, positive M0 scale, conditional suppression pulse count, and timing ranges. Invalid acquisition metadata SHALL fail the review scan rather than disappear through projection or produce confirmable partial results. Validation SHALL normalize a copy of only the frontend's existing comma-number and comma-array fields (trim strings, ignore empty comma parts, omit empty values, unwrap a single number only for scalar-or-array fields); scanned raw values SHALL remain unchanged. This SHALL NOT introduce a second set of scientific range rules.
@@ -135,6 +163,13 @@ Before fingerprinting and common-value projection, each acquisition's projected 
 
 ### Requirement: ASLContext excluded from fingerprint hash
 
+ASL context SHALL not affect fingerprint membership and SHALL be displayed at group level only when every contributing acquisition has the same parsed context.
+
+#### Scenario: Group acquisitions have matching or differing ASL contexts
+
+- **WHEN** ASL context is considered during grouping and metadata projection
+- **THEN** membership, common-context display, and M0 derivation SHALL follow these rules:
+
 `ASLContext` (parsed from `*_aslcontext.tsv` and injected into group `params`) SHALL NOT be part of `FINGERPRINT_FIELDS`. Two subjects with the same scanner/sequence parameters but different ASLContext layouts (e.g., 5 m0scans vs 100 m0scans) MUST group together.
 
 The parsed raw ASLContext string SHALL be stored in the group's `params.ASLContext` for display (BIDSReviewPanel + manifest §1) only when every contributing acquisition has the same context string. If any contributing contexts differ, the group field SHALL be omitted rather than copying one acquisition's context. This projection SHALL NOT change fingerprint membership, per-acquisition M0Type derivation, or skip behavior.
@@ -145,6 +180,13 @@ The parsed raw ASLContext string SHALL be stored in the group's `params.ASLConte
 - **THEN** both subjects belong to the same fingerprint group; the group's `params.ASLContext` SHALL be absent because the contexts differ
 
 ### Requirement: M0Type derived except sidecar's `"Estimate"` honored
+
+Scanning SHALL derive M0 type from separate scans and context in the specified precedence order, honoring only an explicit sidecar `Estimate` override.
+
+#### Scenario: Acquisition M0 type is derived
+
+- **WHEN** sidecar metadata, M0 images, and ASL context are available for scanning
+- **THEN** derivation SHALL apply this ordered decision table:
 
 `M0Type` SHALL be derived at scan time per these rules, in order:
 
@@ -176,6 +218,13 @@ The sidecar's `M0Type` values other than `"Estimate"` (including `"Integrated"` 
 - **THEN** derived `M0Type = "Absent"`
 
 ### Requirement: Image metadata checks report skipped sessions
+
+Review scanning SHALL report session exclusions for metadata-discovery and readability failures while rejecting readable invalid acquisition metadata, preserving the documented partial-membership limitation.
+
+#### Scenario: ASL metadata or context checks encounter failures
+
+- **WHEN** a session's ASL images are checked before grouping
+- **THEN** skipping, extraction, and scan-wide validation failure SHALL follow these rules:
 
 For sessions containing ASL NIfTIs, native scan SHALL resolve applicable JSON and context per image before grouping. Missing, ambiguous, unreadable, non-object, or invalid JSON, missing context, or association discovery errors skip the entire session. The scan continues; the frontend exposes `skipped` as `skippedSubjects`.
 
@@ -209,6 +258,13 @@ Native context extraction SHALL discard the first line, trim the remaining rows,
 - **THEN** the native scan SHALL report the session in `skipped[]`; the earlier membership remains and subsequent sidecars for that session are omitted
 
 ### Requirement: scan_bids_sidecars command returns typed SidecarGroup
+
+`scan_bids_sidecars` SHALL return typed fingerprint groups and skipped identifiers with derived acquisition labels and deduplicated, sorted subject/session memberships.
+
+#### Scenario: Sidecar scanning returns grouped review data
+
+- **WHEN** `scan_bids_sidecars` completes successfully
+- **THEN** discovery, grouping, and response fields SHALL satisfy this typed contract:
 
 `scan_bids_sidecars(root_path: String) -> Result<BidsSidecarScan, String>` SHALL discover subjects and sidecars, perform the session/context checks above, and group parsed sidecar metadata by fingerprint with derived vendor, sequence, labeling type, and suggested labels.
 
@@ -247,6 +303,13 @@ Native context extraction SHALL discard the first line, trim the remaining rows,
 - **THEN** `groups.len() == 2`; Philips group has 10 subjects; Siemens group has 15 subjects
 
 ### Requirement: Label auto-suggestion algorithm
+
+Suggested group labels SHALL combine available canonical acquisition components and resolve collisions deterministically without unknown-value placeholders.
+
+#### Scenario: Acquisition groups receive suggested labels
+
+- **WHEN** Rust computes labels for one or more fingerprint groups
+- **THEN** component formatting, omissions, ordering, and suffixes SHALL follow this algorithm:
 
 Rust `vendor.rs` SHALL compute auto-suggested labels using the pattern:
 
@@ -295,6 +358,13 @@ Collision resolution: when multiple groups produce the same label, suffix `_(2)`
 - **THEN** vendor derivation returns that target vendor name
 
 ### Requirement: Sequence derivation cleans duplicate prefixes
+
+Sequence derivation SHALL join available acquisition and pulse-sequence segments without duplicate prefixes, while fingerprint normalization retains its specified fuzzy matching and fallback behavior.
+
+#### Scenario: Sequence segments are derived and normalized
+
+- **WHEN** acquisition type or pulse-sequence metadata is present or missing
+- **THEN** joining, prefix removal, and fuzzy fingerprint normalization SHALL follow these rules:
 
 `derive_sequence(acq_type: Option<&str>, pulse_seq: Option<&str>)` returns sequence name by joining present segments, defaulting to `"UnknownSequence"` if both are missing.
 

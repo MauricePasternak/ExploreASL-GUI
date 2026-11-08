@@ -8,6 +8,13 @@ Define capture of processing environment versions for manifests.
 
 ### Requirement: Native preparation captures versions
 
+Native Population preparation SHALL settle version capture before scientific spawn and persist committed-run provenance through terminal reconciliation, retaining honest unknown fallbacks and failing on unsettled probes.
+
+#### Scenario: Reserved Population preparation captures software versions
+
+- **WHEN** native preparation probes versions alongside independent participant preparation
+- **THEN** capture timing, snapshot provenance, persistence, and probe-failure handling SHALL follow these rules:
+
 For a reserved Population run, native processing preparation SHALL capture ExploreASL, MATLAB, and GUI versions during `preparing`, in parallel with independent participant preparation, and SHALL await capture before scientific workers spawn. The native snapshot SHALL carry this provenance. The renderer SHALL NOT launch processing-time version probes. Native terminal reconciliation SHALL write accepted values to `uiState.processing.population.lastRun.exploreASLVersion`, `matlabVersion`, and `guiVersion` after Population execution has committed.
 
 A settled probe failure that permits fallback SHALL set the corresponding field to the literal string `"unknown"` without discarding other captured versions. A timed-out or otherwise unsettled probe SHALL fail preparation and settle its owned process scope before terminal publication; scientific workers SHALL NOT spawn with unresolved probe ownership.

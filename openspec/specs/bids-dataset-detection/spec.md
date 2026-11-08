@@ -8,6 +8,13 @@ Define detection and validation of BIDS ASL datasets before direct import.
 
 ### Requirement: check_bids_dataset command validates folder as BIDS ASL source
 
+`check_bids_dataset` SHALL detect usable BIDS ASL structure and applicable metadata presence, returning typed counts, layout information, and actionable detection errors without parsing ASL sidecar contents.
+
+#### Scenario: Candidate folder is inspected for usable BIDS ASL structure
+
+- **WHEN** `check_bids_dataset` receives a candidate root
+- **THEN** detection and the returned result SHALL satisfy this algorithm and field contract:
+
 The Rust command `check_bids_dataset(root_path: String) -> BidsCheckResult` SHALL scan the provided folder for BIDS structure and ASL content. It does NOT parse sidecar JSON; it checks directory structure and sidecar presence only.
 
 Algorithm:
@@ -74,6 +81,13 @@ Result `BidsCheckResult` fields: `setup_recovered: usize`, `is_bids: bool`, `has
 
 ### Requirement: LandingPage shows confirmation dialog on BIDS detection
 
+New-project folder selection SHALL always lead to explicit import setup confirmation, with detection-specific choices and a current reviewed mutation plan where required; creation SHALL precede activation and navigation.
+
+#### Scenario: Detection determines setup choices and reviewed creation
+
+- **WHEN** the new-project folder picker returns a path
+- **THEN** dialog choices, mutation-plan review, cancellation, and creation SHALL follow these rules:
+
 After the folder picker returns a path, `LandingPage.handleNewProject()` MUST invoke `check_bids_dataset` for read-only detection after any separately disclosed prior-setup recovery. Based on the result, a unified project import setup modal MUST always be shown:
 
 - `error == null && is_bids` → show dialog: "Use this existing ASL dataset?" with both "Use existing BIDS images — Recommended" and "Import original scanner files (DICOM)" enabled, without automatically selecting either. Display the selected folder name, `asl_subject_count` as participants, and `asl_session_count` as imaging sessions, with singular/plural wording. Do not display the redundant "Cross-sectional: Yes/No" field. When `missing_aslcontext_count > 0`, show a non-blocking warning that this many ASL runs lack label/control information (`*_aslcontext.tsv`) and affected participant sessions will be excluded from BIDS review. This is a per-ASL-file/run count, never a count of distinct excluded sessions.
@@ -116,6 +130,13 @@ In all cases, the dialog features `[Create project]` (enabled only when an optio
 - **THEN** confirmation SHALL commit exactly that plan before project activation, while cancellation SHALL leave the source tree unchanged
 
 ### Requirement: Dataset setup uses accessible, non-technical language
+
+Dataset setup SHALL explain import choices and planned changes in accessible language within a responsive, readable dialog, distinguishing new mutations from disclosed prior recovery.
+
+#### Scenario: Setup choices and technical details are displayed
+
+- **WHEN** a user reviews dataset setup on a desktop or narrow window
+- **THEN** layout, choice descriptions, and mutation notices SHALL satisfy these rules:
 
 The modal SHALL use a desktop width of approximately 720 CSS pixels, constrained to the available viewport on smaller windows. Body and option descriptions SHALL use readable text rather than extra-small technical captions. Long folder names, paths, hashes, and text previews SHALL wrap without horizontal overflow; actions SHALL wrap on narrow windows and remain reachable when technical details are expanded.
 

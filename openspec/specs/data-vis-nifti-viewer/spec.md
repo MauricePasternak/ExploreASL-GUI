@@ -8,6 +8,13 @@ Define NIfTI volume delivery and viewing for population analysis data.
 
 ### Requirement: Custom NiiVue Tauri Protocol
 
+The native `niivue://` protocol SHALL resolve qCBF and rT1 images within the active project's Population directory using native filename templates and canonical-path confinement.
+
+#### Scenario: A viewer requests qCBF or structural image data
+
+- **WHEN** a supported `niivue://` URL is resolved
+- **THEN** URL compatibility, identifiers, filenames, and root authority SHALL follow these rules:
+
 A custom Tauri protocol `niivue://` SHALL be registered in `tauri::Builder`. It SHALL serve qCBF and rT1 NIfTI files from the active project's Population directory. Existing `niivue://localhost/qCBF/{participant_id}/{run}` URLs SHALL remain supported, with optional `.nii` or `.nii.gz` on Run. `niivue://localhost/rT1/{participant_id}` SHALL resolve `rT1_{participant_id}.nii`, with optional `.nii` or `.nii.gz` on the identifier and no Run segment. Raw participant identifiers SHALL be preserved: GUI Session is ExploreASL Visit; GUI Run is ExploreASL Session (TSV `session`). Rust SHALL own filename templates and SHALL try `.nii` before `.nii.gz`. The existing active-project root registry and canonical-path confinement SHALL remain authoritative.
 
 #### Scenario: qCBF volume served with run
@@ -61,6 +68,13 @@ The AppState SHALL maintain a `Mutex<Option<PathBuf>>` storing the active projec
 
 ### Requirement: Viewer Panel States
 
+Viewer panes SHALL independently expose idle, loading, loaded, and error states, discarding replaced images without affecting other panes and retaining the specified selection and pin behavior.
+
+#### Scenario: Selection changes or an image load fails
+
+- **WHEN** a viewer pane has no selection or loads a replacement image
+- **THEN** skeletons, visibility, errors, and pane independence SHALL follow these rules:
+
 The primary pane SHALL always be visible. With WebGL2 available and no selected point it SHALL show header/image skeletons and "Click on a datapoint to load in its respective qCBF image." with its canvas hidden. Each pane SHALL have independent idle/loading/loaded/error presentation. Replacement SHALL remove that pane's old image before loading begins; failure SHALL NOT restore it or affect the other pane. qCBF failures SHALL retain "Failed to load image for {participantId}_{run}."; rT1 failures SHALL show "Failed to load structural image for {participantId}." Missing and unreadable files SHALL use the same modality-specific message. An existing pin SHALL remain visible in Pinned mode when primary selection clears.
 
 #### Scenario: Placeholder before first click
@@ -113,6 +127,13 @@ Each pane SHALL check WebGL2 availability before creating its viewer. An unavail
 - **THEN** it SHALL show the context-loss message while chart and healthy pane remain interactive
 
 ### Requirement: qCBF Image Path Resolution
+
+qCBF lookup SHALL preserve raw participant and Run values, prefer `.nii` before `.nii.gz`, and present one load-failure message for missing or unreadable images.
+
+#### Scenario: A datapoint selects its qCBF image
+
+- **WHEN** the viewer resolves an image from a clicked datapoint
+- **THEN** filename construction, fallback, and error presentation SHALL follow these rules:
 
 The qCBF filename SHALL be constructed as `qCBF_{participant_id}_{run}.nii` using the raw `participant_id` and `run` (TSV `session` column value) from the clicked datapoint. No Subject/Session splitting is needed — the `participant_id` is used verbatim. The protocol SHALL try `.nii` first, then fall back to `.nii.gz`. If neither resolves, the protocol SHALL return 404. The frontend SHALL use the generic "Failed to load image for {participantId}_{run}." when the image load rejects; it SHALL NOT distinguish missing files from unreadable images in that message.
 

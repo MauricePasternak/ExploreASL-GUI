@@ -8,6 +8,13 @@ Defines initial inter-rater agreement computation and display for multi-reviewer
 
 ### Requirement: Preview-Owned Agreement Calculation
 
+Manifest payload construction SHALL derive uncached agreement from eligible, completely rated original verdicts of registered reviewers, independently of resolutions and stale reviewer slices.
+
+#### Scenario: Preview or export derives reviewer agreement
+
+- **WHEN** the payload builder evaluates available subject-sessions and QC state
+- **THEN** calculation ownership, eligibility, and excluded verdict sources SHALL follow these rules:
+
 The manifest preview payload builder SHALL derive agreement from current registered reviewers' original verdicts, metadata-group assignments, available SubjectSessions, and QC eligibility. It SHALL use the statistical functions in `src/lib/interRaterAgreement.ts`, without a separate manifest-store calculation action or cached agreement result. Preview and exports SHALL consume the derived payload.
 
 Only available SubjectSessions rated by every registered reviewer SHALL contribute to overall and per-group statistics and disagreement counts. After successful QC loading, No Info SubjectSessions SHALL be excluded even if stored verdicts remain. A failed QC load SHALL NOT itself exclude SubjectSessions. Resolved verdicts and verdict slices belonging to unregistered reviewers SHALL NOT affect initial agreement.
@@ -18,6 +25,13 @@ Only available SubjectSessions rated by every registered reviewer SHALL contribu
 - **THEN** the preview payload SHALL derive updated agreement from eligible complete ratings without invoking a manifest-store agreement action
 
 ### Requirement: Cohen's Kappa Computation For Two Reviewers
+
+Exactly two reviewers SHALL use the specified Cohen's Kappa and normal-approximation confidence interval, preserving null degenerate results and unclamped bounds.
+
+#### Scenario: Two reviewers have eligible pass/fail ratings
+
+- **WHEN** agreement is computed for exactly two reviewers
+- **THEN** contingency counts, formulas, degenerate cases, and return fields SHALL satisfy this algorithm:
 
 When exactly 2 reviewers exist, the manifest preview payload builder SHALL compute Cohen's Kappa (κ) on the eligible pass/fail verdicts. The computation SHALL:
 
@@ -78,6 +92,13 @@ function cohensKappa(
 - **THEN** `cohensKappa` SHALL compute over the intersection `["sub-01", "sub-02"]` with `n: 2`
 
 ### Requirement: Fleiss' Kappa Computation For More Than Two Reviewers
+
+More than two reviewers SHALL use the specified Fleiss' Kappa calculation on completely rated eligible subject-sessions, returning null Kappa and intervals for the documented insufficient or degenerate cases.
+
+#### Scenario: Multiple reviewers contribute complete pass/fail ratings
+
+- **WHEN** agreement is computed for more than two reviewers
+- **THEN** eligibility, formulas, confidence intervals, and result shape SHALL satisfy this algorithm:
 
 When more than 2 reviewers exist, the manifest preview payload builder SHALL compute Fleiss' Kappa (κ) on the eligible pass/fail verdicts. The computation SHALL:
 
@@ -155,6 +176,13 @@ The manifest preview payload builder SHALL compute agreement statistics (Kappa a
 
 ### Requirement: Agreement Results Shape
 
+Multi-reviewer payloads SHALL include overall and ordered per-group agreement plus original-disagreement counts; single-reviewer payloads SHALL omit agreement data.
+
+#### Scenario: Agreement statistics are placed in the manifest payload
+
+- **WHEN** the payload builder assembles reviewer agreement
+- **THEN** result fields, group ordering, Ungrouped handling, and counting SHALL satisfy this shape:
+
 In multi-reviewer mode, the preview payload builder SHALL populate `ManifestPayload.agreement` with the following TypeScript shape. Single-reviewer payloads SHALL omit agreement data.
 
 ```typescript
@@ -199,6 +227,13 @@ The `overall` field SHALL contain statistics computed across eligible subjectSes
 - **THEN** the agreement payload SHALL omit the `"Ungrouped"` entry
 
 ### Requirement: Agreement Display In Manifest Preview
+
+Multi-reviewer preview SHALL show overall and per-group initial agreement and Kappa with cautious interpretation guidance, consistently labeling rated units as subject-sessions rather than unique participants.
+
+#### Scenario: Multi-reviewer preview displays agreement statistics
+
+- **WHEN** the agreement panel and corresponding document exports are rendered
+- **THEN** placement, statistics, guidance, and unit labels SHALL follow these rules:
 
 When in multi-reviewer mode, the manifest Preview step SHALL display an "Inter-Rater Agreement" accordion panel between QC Summary and Pipeline Summary. The section SHALL render:
 

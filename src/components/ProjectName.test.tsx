@@ -183,7 +183,9 @@ describe("inline project rename", () => {
       "/legacy/project.easl",
     ]);
     act(() => useProcessingStore.setState({ processingPhase: "idle" }));
-    fireEvent.click(screen.getByTestId("layout-nav-home"));
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("layout-nav-home"));
+    });
     await screen.findByRole("button", { name: "Open legacy" });
     expect(screen.getAllByRole("button", { name: `Open ${name}` })).toHaveLength(2);
     expect(screen.getByTestId("recent-project-path--project-link-project-easl")).toHaveTextContent(
@@ -229,7 +231,7 @@ describe("inline project rename", () => {
     fireEvent.blur(input);
     await screen.findByTestId("layout-project-name-text");
     expect(edits()).toHaveLength(1);
-    expect(screen.getByTestId("layout-project-rename-btn")).toHaveFocus();
+    await waitFor(() => expect(screen.getByTestId("layout-project-rename-btn")).toHaveFocus());
     useProjectStore.getState().cancelAutosave();
     const cancelled = editName("Discard this");
     fireEvent.keyDown(cancelled, { key: "Escape" });

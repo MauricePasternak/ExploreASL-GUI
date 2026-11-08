@@ -8,6 +8,13 @@ Define globally stored MATLAB and Apptainer execution profiles, validation at fo
 
 ### Requirement: Execution Profile schema
 
+Execution profiles SHALL use a validated discriminated union of MATLAB and Apptainer variants with shared identity, label, and optional detected-version fields, rejecting unsupported types.
+
+#### Scenario: An execution profile is parsed
+
+- **WHEN** profile data enters the frontend schema
+- **THEN** shared fields and variant shapes SHALL satisfy these definitions:
+
 The system SHALL define an `ExecutionProfileSchema` as a Zod discriminated union on the `type` field. All profile variants SHALL share a base shape containing: `id: z.string().uuid()`, `label: z.string().min(1)`, and `exploreAslVersion: z.string().optional()`. The supported variants SHALL be `matlab` and `apptainer`. The MATLAB variant SHALL be:
 
 ```
@@ -49,6 +56,13 @@ The Apptainer variant SHALL follow the Apptainer Execution Profile schema requir
 ---
 
 ### Requirement: Global profile storage
+
+Global settings SHALL store execution profiles and provide UUID-based management actions, allowing confirmed deletion of the last profile with a warning about unavailable execution and project access.
+
+#### Scenario: Profiles are created, edited, or deleted
+
+- **WHEN** global execution-profile settings change
+- **THEN** storage, identity, actions, and deletion warnings SHALL follow these rules:
 
 The `GlobalSettingsSchema` SHALL replace `matlabInstallations`, `exploreAslPath`, and `exploreAslVersion` with a single `executionProfiles: z.array(ExecutionProfileSchema).default([])` field. The global settings store SHALL provide actions: `addProfile(profile)`, `updateProfile(id, updates)`, `deleteProfile(id)`, and `getProfileById(id)`. Profile IDs SHALL be UUIDs generated on the frontend when creating a new profile.
 
@@ -93,6 +107,13 @@ Profile deletion SHALL NOT be blocked based on whether projects reference the pr
 
 ### Requirement: App loading gate
 
+Application initialization SHALL finish loading settings and validating profiles before rendering the main UI or making profile-dependent decisions.
+
+#### Scenario: The application initializes settings and profiles
+
+- **WHEN** the application starts
+- **THEN** loading feedback and initialization SHALL follow this sequence:
+
 The app SHALL block rendering of the main UI until settings have loaded and profile validation has completed. The initialization sequence SHALL be:
 
 1. Show a loading indicator (e.g., centered spinner or skeleton).
@@ -116,6 +137,13 @@ This ensures the app never renders with stale default settings and that `profile
 ---
 
 ### Requirement: First-run onboarding
+
+An empty execution-profile list SHALL show setup guidance and an Open Settings action instead of project controls, switching to normal controls once a valid profile is saved.
+
+#### Scenario: No execution profiles are configured
+
+- **WHEN** the application starts without profiles or all profiles have been deleted
+- **THEN** welcome-card content and transition to project controls SHALL follow these rules:
 
 When the app starts with zero execution profiles (first launch or all profiles deleted), the landing page SHALL display a **welcome card** instead of the normal "New Project" / "Open Project" controls. The welcome card SHALL:
 
@@ -145,6 +173,13 @@ The welcome card SHALL be shown whenever `executionProfiles` is empty, not only 
 ---
 
 ### Requirement: Profile validation — multi-phase
+
+Profiles SHALL validate at save, startup, selection, and native preparation boundaries, maintaining reconciled in-memory validity and detected versions while preserving execution gates and actionable errors.
+
+#### Scenario: Profile lifecycle events trigger validation
+
+- **WHEN** profiles are saved, loaded, selected, or admitted for execution
+- **THEN** validation ownership, result reuse, reconciliation, and error reporting SHALL follow these rules:
 
 Profile validation SHALL occur at four points in the application lifecycle. The system SHALL maintain an in-memory `profileValidationState: Record<string, { valid: boolean, errors: string[] }>` in the global store. This state is NOT persisted — it is recomputed at each validation trigger. When validation runs, `exploreAslVersion` SHALL also be re-detected via the Rust validation command and updated on the profile if it has changed.
 
@@ -230,6 +265,13 @@ UI-facing validation `errors` SHALL contain human-readable explanations and next
 
 ### Requirement: Project gating on valid profiles
 
+Project creation and opening SHALL require at least one valid execution profile, while Settings remains accessible and successful profile configuration immediately lifts the gate.
+
+#### Scenario: Landing-page actions evaluate validated profiles
+
+- **WHEN** startup validation completes or profile validity changes
+- **THEN** onboarding, alerts, Settings access, and project-action gates SHALL follow these rules:
+
 Creating or opening a project SHALL be blocked if no valid execution profiles exist. The system SHALL check `profileValidationState` after startup validation completes:
 
 - If zero profiles exist, the first-run onboarding welcome card is shown (see above).
@@ -266,6 +308,13 @@ Creating or opening a project SHALL be blocked if no valid execution profiles ex
 
 ### Requirement: Execution blocking when all profiles invalid
 
+Import and processing SHALL remain blocked without a valid configured profile, including revalidation of the selected profile before native command invocation.
+
+#### Scenario: Start is requested after profiles become unavailable or invalid
+
+- **WHEN** an open project's execution controls evaluate profile readiness
+- **THEN** alerts, button state, and pre-start checks SHALL follow these rules:
+
 Even when a project is already open, ExploreASL execution SHALL be blocked if no valid execution profiles exist. Specifically:
 
 - The Import page's "Start Import" button SHALL be disabled with an alert when `executionProfiles` is empty or all profiles are invalid.
@@ -289,6 +338,13 @@ This covers the case where a user has a project open and then deletes all profil
 ---
 
 ### Requirement: Profile management UI in Settings modal
+
+Settings SHALL provide type-specific profile creation, editing, discovery, and validity display, showing detected Apptainer versions only in saved profile rows.
+
+#### Scenario: An Apptainer profile is edited in Settings
+
+- **WHEN** the add/edit form or profile list is displayed
+- **THEN** fields, discovery actions, version display, and validity indicators SHALL follow these rules:
 
 The Settings modal's "Execution Profiles" section SHALL support the creation and editing of Apptainer profiles:
 
@@ -351,6 +407,13 @@ The Settings modal's "Execution Profiles" section SHALL support the creation and
 
 ### Requirement: Profile selector on Import page
 
+Import execution SHALL select a persisted configured profile with visible type, version, and validity, disabling Start for invalid or absent profiles.
+
+#### Scenario: Import step 5 displays execution-profile selection
+
+- **WHEN** configured profiles are available or missing on the Import page
+- **THEN** selection, persistence, and execution gating SHALL follow these rules:
+
 The Import step 5 execution view SHALL replace the MATLAB version select dropdown with a Profile selector dropdown. The dropdown SHALL list all execution profiles from `globalStore.settings.executionProfiles`, displaying each profile's label, type badge, ExploreASL version (if available), and validity state. The selection SHALL be stored as `selectedProfileId` and persisted in the `.easl` project file under `uiState.import.selectedProfileId`. Invalid profiles SHALL be shown in the dropdown (so the user knows they exist) but SHALL be visually marked and SHALL disable the Start button when selected.
 
 If no profiles are configured, the "Start Import" button SHALL be disabled and an alert SHALL be shown directing the user to configure a profile in Settings.
@@ -394,6 +457,13 @@ If no profiles are configured, the "Start Import" button SHALL be disabled and a
 ---
 
 ### Requirement: Profile selector on Processing page
+
+Processing SHALL select a configured profile, default to the first valid profile when unset, and bind its resolved value into immutable native reservation rather than replacing it at launch.
+
+#### Scenario: Processing selects and reserves an execution profile
+
+- **WHEN** the Processing page initializes or prepares a run
+- **THEN** selection defaults, validity, reservation, and launch SHALL follow these rules:
 
 The Processing page SHALL replace the MATLAB selection dropdown with a Profile selector dropdown. The dropdown SHALL list all execution profiles from `globalStore.settings.executionProfiles` with validity indicators. The selection SHALL be stored as `selectedProfileId` in the processing config (replacing `matlabPath` and `exploreAslPath`). The selected profile SHALL be resolved to a full profile object in the immutable `reserve_processing_run` request. `run_pipeline` SHALL launch only the returned run ID, without replacement profile arguments. The Start button SHALL be disabled when the selected profile is invalid.
 
@@ -445,6 +515,13 @@ When a new project is created, the Import phase SHALL have `selectedProfileId` i
 
 ### Requirement: Rust ExecutionProfile deserialization and validation
 
+Rust SHALL deserialize MATLAB and Apptainer profiles as a typed camelCase-compatible enum, accepting profiles at validation and reservation boundaries and only reserved identity at processing launch.
+
+#### Scenario: Native commands receive execution-profile arguments
+
+- **WHEN** a profile-bearing command or reserved processing launch is invoked
+- **THEN** enum fields and argument boundaries SHALL satisfy this contract:
+
 The Rust backend SHALL define an `ExecutionProfile` enum with `serde(tag = "type")` for internally-tagged deserialization. It SHALL include `Matlab` and `Apptainer` variants. `Matlab` SHALL contain fields: `id: String`, `label: String`, `matlab_path: String`, `explore_asl_path: String`, `explore_asl_version: Option<String>`. The Rust fields SHALL serialize as `camelCase` to match the frontend JSON.
 
 `launch_import_run`, `validate_execution_profile`, and `validate_all_execution_profiles` SHALL accept typed `ExecutionProfile` values. `reserve_processing_run` SHALL accept the typed profile within its immutable request; `run_pipeline` SHALL accept only the reserved run ID. Tauri SHALL handle serde deserialization natively without manual JSON string wrapping.
@@ -460,6 +537,13 @@ The Rust backend SHALL define an `ExecutionProfile` enum with `serde(tag = "type
 - **THEN** deserialization SHALL fail with a serde error (no supported `Docker` variant)
 
 ### Requirement: Rust profile validation commands
+
+Native single-profile and batch validation SHALL share type-specific validation logic and return profile identity, validity, human-facing errors, and detected ExploreASL version.
+
+#### Scenario: Native profile validation is invoked singly or in a batch
+
+- **WHEN** validation commands receive typed profiles
+- **THEN** signatures, result fields, and MATLAB checks SHALL satisfy this contract:
 
 The Rust backend SHALL expose two validation commands that reuse the same internal `ExecutionProfile::validate()` method:
 
@@ -510,6 +594,13 @@ For future profile types, validation SHALL be type-specific.
 - **THEN** the result SHALL be a `Vec` of 3 `ProfileValidationResult` entries, each keyed by the profile's `id`, with the correct `valid`/`errors`/`explore_asl_version` values
 
 ### Requirement: Apptainer Execution Profile schema
+
+Apptainer profiles SHALL extend the shared profile base with a required SIF path and executable path defaulting to `apptainer`, using compatible frontend and native discriminated variants.
+
+#### Scenario: An Apptainer profile is represented across the IPC boundary
+
+- **WHEN** frontend schemas or Rust types represent an Apptainer profile
+- **THEN** fields, defaults, and serialization SHALL satisfy these definitions:
 
 The system SHALL define an `ApptainerProfileSchema` as a Zod object extending `ExecutionProfileBaseSchema`. It SHALL contain:
 
@@ -568,6 +659,13 @@ pub enum ExecutionProfile {
 
 ### Requirement: Apptainer profile validation
 
+Apptainer validation SHALL check the image and host executable, support the default Singularity fallback, and detect ExploreASL version through bounded native probes without performing MCR warmup.
+
+#### Scenario: An Apptainer profile is validated before use
+
+- **WHEN** profile validation receives the Apptainer variant
+- **THEN** filesystem checks, executable fallback, probe deadlines, and warmup separation SHALL follow these rules:
+
 Apptainer profile validation SHALL occur at the same lifecycle points as Matlab validation. The Rust validation command `validate_execution_profile` and `validate_all_execution_profiles` SHALL handle the `Apptainer` variant:
 
 1. Verify that `sifPath` exists on disk and is a file.
@@ -588,6 +686,13 @@ Apptainer profile validation SHALL occur at the same lifecycle points as Matlab 
 - **THEN** the validation result SHALL return `valid: false`, `errors` containing "SIF image not found at this path", and `exploreAslVersion: null`
 
 ### Requirement: Apptainer Executable Auto-Detection and Label Inference
+
+Apptainer discovery SHALL find and canonicalize PATH installations, infer version-based or path-based labels through bounded probes, and populate selected form paths without overwriting a nonempty user label.
+
+#### Scenario: Apptainer or Singularity installations are discovered
+
+- **WHEN** executable discovery supplies candidates to the profile form
+- **THEN** deduplication, probing, labels, and form population SHALL follow these rules:
 
 The system SHALL support auto-detecting and auto-labeling Apptainer and Singularity installations:
 

@@ -33,6 +33,13 @@ The 25 scalar Switch/FlagToggle controls SHALL display two states using native-o
 
 ### Requirement: DataPar parameter state schema
 
+The current project contract SHALL validate supported optional DataPar fields and preserve loose scientific extension keys in project persistence without implicitly including them in outbound processing JSON.
+
+#### Scenario: Sparse DataPar configuration is edited or persisted
+
+- **WHEN** supported settings or scientific extension keys enter the current project contract
+- **THEN** validation, persistence, panel structure, and defaults SHALL follow these rules:
+
 The system SHALL represent supported flat DataPar settings through the shared current project contract with optional fields named exactly as ExploreASL requires. Known types, numeric flag representations, array sizes, and supported ranges SHALL validate before configuration acceptance. Unknown loose scientific extension keys SHALL survive `.easl` project load, accepted edits, save, and reopen; this persistence guarantee SHALL NOT imply inclusion in nested outbound processing JSON, whose assembly enumerates supported keys only. UI panels SHALL remain M0, Quantification, General Settings, ASL Processing, Atlases, Structural, and Environment. Form placeholders SHALL not inject processing defaults; ordinary editing SHALL not require a complete execution-ready configuration.
 
 #### Scenario: Empty state produces minimal JSON
@@ -53,6 +60,13 @@ The system SHALL represent supported flat DataPar settings through the shared cu
 
 ### Requirement: Field metadata constant
 
+`FIELD_METADATA` SHALL own non-switch labels and hints, while native defaults own scalar switches and components own presentation; help SHALL reflect the audited ExploreASL checkout without populating unset fields.
+
+#### Scenario: Parameter labels and default hints are rendered
+
+- **WHEN** parameter metadata supplies help or proposed defaults
+- **THEN** ownership and checkout-specific scientific descriptions SHALL satisfy these rules:
+
 The system SHALL define `FIELD_METADATA` for field labels, help, hints and non-switch defaults. Scalar switch choices SHALL come only from native-owned defaults projected through the existing bindings generator. Parameter components SHALL own section placement, basic/advanced grouping, widget selection and conditional visibility without duplicating those descriptors in `FIELD_METADATA`. Descriptions SHALL match operative meanings and units in the audited ExploreASL checkout `6dafdba4cd2333eede4525d05f110b1cfa3f63c6`, identified by `VERSION_2.0.0_BETA`; this SHALL NOT imply support across all releases. Hints SHALL distinguish explicit GUI policy from fixed or data-dependent MATLAB defaults. Metadata hints SHALL NOT populate unset processing fields.
 
 FSL help SHALL describe the explicit initially on choice and MATLAB's automatic search when no FSL directory is already available. Lesion-filling help SHALL distinguish the explicit initially off choice from MATLAB's true default when unset. VABY discovery help SHALL state that the audited checkout does not implement automatic discovery and requires configured `x.external.VABYdir` for requested VABY quantification; existing discovery flag values SHALL remain preserved. Legacy ATT inference SHALL retain its checkout-specific unsupported warning.
@@ -63,6 +77,13 @@ FSL help SHALL describe the explicit initially on choice and MATLAB's automatic 
 - **THEN** help SHALL explain that the explicit initially off choice overrides automatic data-dependent TopUp selection
 
 ### Requirement: M0 field widget
+
+The M0 selector SHALL support separate-scan, control, absent, and custom numeric choices without assigning a value to an unset field.
+
+#### Scenario: M0 selection is displayed or changed
+
+- **WHEN** the M0 field is unset or the user chooses a source
+- **THEN** choices, custom controls, and placeholder behavior SHALL follow these rules:
 
 The `x.Q.M0` field SHALL be rendered as a Mantine `Select` with options: `separate_scan` ("Separate M0 scan"), `UseControlAsM0` ("Use control as M0"), `Absent` ("Absent — skip M0 processing"), and a fourth option `__custom__` ("Custom value"). Selecting `__custom__` SHALL reveal a `NumberInput` for the numeric M0 value. A fresh project's unset M0 SHALL display no selection and the placeholder "Select M0 source", not select `Absent`. Display hints and ExploreASL runtime defaults SHALL NOT populate the field.
 
@@ -98,6 +119,13 @@ The `x.Q.M0` field SHALL be rendered as a Mantine `Select` with options: `separa
 
 ### Requirement: ApplyQuantification checkbox group
 
+Quantification steps SHALL use six ordered checkboxes with select-all controls, displaying an unset value as checked without persisting defaults.
+
+#### Scenario: Quantification-step choices are displayed
+
+- **WHEN** the quantification checkbox group renders
+- **THEN** labels, order, bulk controls, and unset handling SHALL satisfy this contract:
+
 The `x.modules.asl.ApplyQuantification` field SHALL be rendered as 6 labeled checkboxes, in order: "Apply pixel intensity scaling to ASL timeseries", "Apply pixel intensity scaling to M0 image", "Convert perfusion-weighted signal to label volume", "Calibrate M0 intensity (correct T1 relaxation)", "Divide perfusion signal by M0", "Apply global scaling factors to final CBF map". A "Select all" / "Deselect all" toggle SHALL be shown above the group. An unset value SHALL display all checked without writing a default.
 
 #### Scenario: User deselects step 5
@@ -111,6 +139,13 @@ The `x.modules.asl.ApplyQuantification` field SHALL be rendered as 6 labeled che
 - **THEN** state field `ApplyQuantification` is set to `[0, 0, 1, 1, 0, 0]`
 
 ### Requirement: Atlas multi-select with paired masking
+
+Atlas selection SHALL pair each chosen atlas with aligned tissue masking and probability thresholds, preserving an empty unset selection and the existing ROI-mask tuple representation.
+
+#### Scenario: Atlas choices and paired ROI masks are configured
+
+- **WHEN** the user views or changes atlas selection and tissue masking
+- **THEN** grouping, defaults, units, indices, and emitted masks SHALL follow these rules:
 
 The `x.S.Atlases` field SHALL use a multi-select grouped into free and non-commercial-only atlases. A fresh project's unset `Atlases` SHALL display an empty selection, not preselect `["Total", "DeepWM"]`; hints or runtime defaults SHALL NOT populate it. Each selected atlas SHALL have paired `TissueMasking` and `TissueThreshold` controls with aligned indices. Tissue choices SHALL include GM, WM, CSF, GM+WM and GM+WM+CSF. `TissueThreshold` SHALL be a unitless probability from 0 to 1, with GUI initial value 0.7, not a volume. Only `MinimalROIVolume` SHALL use mL. ROI mask controls SHALL emit the existing four-element 0/1 tuple representation, including all-on and all-off selections.
 
@@ -136,6 +171,13 @@ The `x.S.Atlases` field SHALL use a multi-select grouped into free and non-comme
 
 ### Requirement: PVC conditional reveal
 
+PVC controls SHALL distinguish explicit new-project defaults from sparse existing values, reveal shape-specific kernel controls when enabled, and preserve explicit kernels and numeric flags.
+
+#### Scenario: PVC state or kernel shape is displayed
+
+- **WHEN** PVC settings are initialized, accepted, or changed
+- **THEN** optional controls, units, defaults, and persistence SHALL follow these rules:
+
 PVC SHALL initially be explicitly Off for new projects; missing values in existing sparse projects SHALL display proposed Off without mutation until explicit acceptance. When displayed on, advanced controls SHALL reveal the optional `bPVCGaussianMM` selector and three-dimensional kernel. Flat kernel dimensions SHALL use voxels and `[5, 5, 1]`; Gaussian FWHM SHALL use mm and `[10, 10, 4]` when no explicit kernel exists. Explicit kernels SHALL survive shape changes. Current persisted PVC flags SHALL use numeric 0/1 only; legacy boolean normalization SHALL not occur during project reading.
 
 #### Scenario: User enables PVC without Gaussian
@@ -154,6 +196,13 @@ PVC SHALL initially be explicitly Off for new projects; missing values in existi
 - **THEN** parsing SHALL reject that field rather than normalize it to numeric 1 or 0
 
 ### Requirement: Basic/advanced toggle
+
+Parameter sections SHALL maintain independent local advanced visibility and a global Structural/Environment visibility toggle, persisted across navigation and restart.
+
+#### Scenario: Local and global advanced parameter visibility changes
+
+- **WHEN** advanced controls are expanded or the project is reopened
+- **THEN** section ownership and persisted visibility keys SHALL follow these rules:
 
 M0, Quantification, General Settings, ASL Processing, and Atlases SHALL each contain a local "Show advanced" sub-divider, with advanced fields initially hidden. Their local visibility flags SHALL remain independent of the global "Show advanced parameter sections" toggle. The global toggle SHALL gate only the Structural and Environment accordion sections; when those panels are opened, their controls SHALL appear directly without a local advanced sub-divider. Global and local flags SHALL persist under `.easl` `uiState.datapar.advancedVisibility`, with the global flag named `showAdvancedSections`, across page navigation and app restarts.
 
@@ -174,6 +223,13 @@ M0, Quantification, General Settings, ASL Processing, and Atlases SHALL each con
 
 ### Requirement: Ghost placeholder defaults
 
+Optional processing fields SHALL display qualified hints without mutation, preserving the distinction between undefined values and explicit empty arrays and deferring scalar switches to their native acceptance contract.
+
+#### Scenario: A sparse field is displayed, cleared, or assembled
+
+- **WHEN** optional fields lack values or the user clears them
+- **THEN** hints, stored emptiness, and outbound omission SHALL follow these rules:
+
 Persisted processing fields SHALL remain optional for sparse-project compatibility. Non-switch empty inputs SHALL display a hint from `FIELD_METADATA.defaultHint` without writing its value. Hints SHALL qualify magnetic-field-dependent relaxation constants and other data-dependent choices instead of asserting universal runtime defaults. Clearing a field to undefined SHALL omit it from outbound JSON; an explicitly stored empty array SHALL remain defined and SHALL be emitted. In particular, clearing the `DataTypes` text input SHALL store `[]`, not undefined, and processing assembly SHALL preserve `x.S.DataTypes = []`. Scalar switch acceptance SHALL follow Authoritative scalar switches; selectors, arrays, numeric fields and hidden SkipIfNo fields SHALL remain optional.
 
 #### Scenario: User sees default for T1blood
@@ -192,6 +248,13 @@ Persisted processing fields SHALL remain optional for sparse-project compatibili
 - **THEN** accepted state and `.easl` SHALL retain `DataTypes = []` and outbound JSON SHALL contain `x.S.DataTypes = []`
 
 ### Requirement: DataPar assembly function
+
+DataPar assembly SHALL map supported flat settings to their specified nested ExploreASL destinations, preserving explicit false, zero, and empty arrays while omitting undefined values and unsupported extension keys.
+
+#### Scenario: Accepted flat settings become outbound processing JSON
+
+- **WHEN** processing configuration is assembled from current project settings
+- **THEN** field destinations, compatibility keys, and Methods readers SHALL satisfy this contract:
 
 The system SHALL convert supported flat optional project settings into nested ExploreASL JSON, preserving explicit numbers, arrays (including empty arrays), zero and false while omitting undefined fields and empty sections. Unknown scientific extension keys preserved in `.easl` SHALL NOT be copied into outbound JSON. The assembly SHALL use these destinations:
 
@@ -248,6 +311,13 @@ The parameter route SHALL retain its existing accordion panels and previously ac
 
 ### Requirement: (?) Tooltip pattern for field labels
 
+Processing fields SHALL expose multiline information tooltips whose descriptions preserve the specified scientific meanings, units, and registration-choice distinctions.
+
+#### Scenario: A user reads processing-field help
+
+- **WHEN** an information tooltip is shown for a processing parameter
+- **THEN** the help SHALL preserve these distinctions:
+
 Each rendered processing field SHALL display an information icon with metadata help in a multiline tooltip. Help SHALL distinguish WMH ROI inclusion from segmentation, numeric M0 scalar calibration from an image, relative t-statistic improvement from a Z-score, and absolute motion threshold in mm from signal intensity. Providing absolute threshold 0 SHALL NOT be described as disabling fixed-threshold removal. Registration contrast choices SHALL describe 0 as control-to-T1w, 1 as CBF/PWI-to-pseudoCBF, 2 as automatic combined registration and 3 as combined registration with forced CBF attempts.
 
 #### Scenario: User hovers over bTopUp label
@@ -261,6 +331,13 @@ Each rendered processing field SHALL display an information icon with metadata h
 - **THEN** it SHALL explain inclusion of existing WMH voxels in ROI masks, not WMH detection
 
 ### Requirement: External quantification conditional subtree
+
+Explicit external quantification SHALL reveal advanced engine controls with qualified defaults, supported model choices, correct units, and saved-value preservation for unsupported legacy options.
+
+#### Scenario: External quantification is enabled
+
+- **WHEN** `bUseExternalQuantification` is explicitly on
+- **THEN** engines, smoothing, BASIL options, units, and legacy help SHALL follow these rules:
 
 When `bUseExternalQuantification` is explicitly on, advanced controls SHALL reveal engine selection BASIL/FABBER/VABY, optional decimal FWHM smoothing widths in mm, masking, BASIL options and cleanup. Unset smoothing SHALL NOT display a fixed `[5, 5, 1]` runtime default or request additional smoothing. Engine hints SHALL describe data-dependent selection when unset. BASIL exchange choices SHALL remain mix/simple/2cpt/spa and dispersion choices none/gamma/gauss/sgauss. ATT prior standard deviation SHALL use seconds. Legacy ATT inference SHALL carry checkout-specific unsupported help while preserving saved values.
 

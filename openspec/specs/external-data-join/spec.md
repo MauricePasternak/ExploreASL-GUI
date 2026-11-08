@@ -8,6 +8,13 @@ Support joining external data file (CSV, TSV, or XLSX) to Population Stats qCBF 
 
 ### Requirement: External Data File Selection
 
+Select Data SHALL offer optional native CSV, TSV, or XLSX selection with source-aware dialog defaults, storing a selected path in join configuration and using null when no external file is selected.
+
+#### Scenario: A user browses for optional external covariates
+
+- **WHEN** external file selection is opened or skipped
+- **THEN** formats, dialog defaults, and saved selection SHALL follow these rules:
+
 The "Select Data" step SHALL provide a "Browse..." button that opens a native file dialog (Tauri `@tauri-apps/plugin-dialog`) for external covariate file selection. Supported formats SHALL be `.csv`, `.tsv`, and `.xlsx`. When launching the file dialog: if an external file is already selected, the dialog's default path SHALL be set to its containing directory; otherwise, if it's the first time browsing, it SHALL default to the active project's root path. The selected file's absolute path SHALL be stored in `joinConfig.externalSource.absolutePath`. External file selection is optional — the user MAY proceed to Column Types with only a qCBF file selected. When no external file is selected, `joinConfig` SHALL be `null`.
 
 #### Scenario: User selects external CSV file
@@ -31,6 +38,13 @@ The "Select Data" step SHALL provide a "Browse..." button that opens a native fi
 - **THEN** the file dialog SHALL filter to supported extensions and the selection SHALL be rejected
 
 ### Requirement: External Data Inspection Command
+
+External inspection SHALL return preview-only typed metadata and content identity with defined sheet and delimiter handling, without changing the active cache or applying configured join missing-value tokens.
+
+#### Scenario: An external source is inspected for join configuration
+
+- **WHEN** `inspect_external_data` receives a selected or saved source
+- **THEN** parsing, inferred metadata, hash, caching exclusions, and request deduplication SHALL follow these rules:
 
 A Rust command `inspect_external_data` SHALL accept `absolutePath: String`, optional `sheetName`, and `delimiter: Option<String>` (where `None` or `Some("auto")` triggers auto-detection) and return an `ExternalDataInspection` object containing: `columns` (array of `{ name, inferredType, levels, isIdentifier }`), `rowCount`, `fileHash` (SHA-256 hex string), and `sheetName` (the inspected sheet name for xlsx, `null` for CSV/TSV). The command SHALL NOT cache data in `AppState` — it is a preview for join configuration. Generic type inference SHALL classify columns as `"continuous"` or `"nominal"` using fixed missing-value rules from `data-vis-contract`, without accepting configured `naTokens`. All external columns SHALL have `isIdentifier: false`. For xlsx files, inspection SHALL read the supplied sheet or the first sheet when omitted; the file-selection UI SHALL omit `sheetName` and inspect the first sheet. For CSV files, an explicit comma, tab, or semicolon delimiter SHALL be used; otherwise, detection SHALL count those characters in the first physical line, without skipping blank lines. Semicolon or tab SHALL be selected only when its count strictly exceeds both others; all other cases SHALL select comma. If a join configuration is already active, the external data file SHALL be automatically inspected on component mount/render using `inspect_external_data`, with deduplication based on path, hash, and delimiter to prevent redundant API calls.
 
@@ -61,6 +75,13 @@ A Rust command `inspect_external_data` SHALL accept `absolutePath: String`, opti
 
 ### Requirement: Join Key Pair Configuration
 
+Join configuration SHALL edit cohesive key pairs between available qCBF identifiers and external columns, executing joins only for a nonempty complete list without blocking Next for incomplete keys alone.
+
+#### Scenario: Join key pairs are added, removed, or left incomplete
+
+- **WHEN** the user configures join keys on Select Data
+- **THEN** controls, allowed columns, stored shape, and advancement SHALL follow these rules:
+
 The join configuration UI SHALL present key-pair rows, each containing a left dropdown (listing available qCBF identifier columns: `participant_id`, `subject`, `session`, `run`) and a right dropdown (listing all external columns). The user SHALL add key pairs via an "Add key pair" button and remove individual pairs via a remove button per row. Key pairs SHALL be stored cohesively as `keys: Array<{ left: string, right: string }>`. Select Data SHALL execute a join only when the list is non-empty and every pair has both columns selected. Empty or incomplete pairs SHALL NOT themselves disable Next; advancing in those cases SHALL retain the current inspection without executing a join. `left` SHALL be restricted to available identifier columns only, while `right` SHALL allow any external column.
 
 #### Scenario: Single key pair join
@@ -89,6 +110,13 @@ The join configuration UI SHALL present key-pair rows, each containing a left dr
 - **THEN** only available columns among `participant_id`, `subject`, `session`, and `run` SHALL be listed — non-identifier columns like `Total_GM_B` SHALL NOT appear
 
 ### Requirement: Join Execution Command
+
+`execute_join` SHALL left-join external covariates onto qCBF rows using normalized keys, resolve column collisions, honor key-drop options, and replace the active cache with typed merged inspection.
+
+#### Scenario: Complete join keys are executed natively
+
+- **WHEN** `execute_join` receives source paths and join options
+- **THEN** matching, unmatched rows, column naming, cache population, and response fields SHALL satisfy this contract:
 
 A Rust command `execute_join` SHALL accept `projectRoot: String`, `qcbfRelativePath: String`, `externalAbsolutePath: String`, `keys: Vec<JoinKeyPair>` (where `JoinKeyPair` contains `{ left: String, right: String }`), `dropRightOn: bool`, `naTokens: Vec<String>`, `sheetName: Option<String>`, and `delimiter: Option<String>`. The command SHALL parse both files, perform a left join (qCBF rows preserved, external covariates appended), and cache the merged result in `AppState.active_data`. The join SHALL use hash-based matching on the key pairs. Key value comparison SHALL be case-insensitive, whitespace-trimmed, and normalized by stripping any leading `sub-` prefix from both qCBF and external identifier values before matching. Unmatched qCBF rows SHALL retain all column from qCBF datas with column from external datas set to empty strings (normalized from NA tokens). Column name collisions on non-key columns SHALL be resolved with `_x` suffix for column from qCBF datas and `_y` suffix for column from external datas. When `dropRightOn` is true, all external join-key columns (`keys[i].right`) SHALL be dropped from the merged result. The command SHALL return a `DataInspection` object with merged `columns` (each carrying `source`, `originalName`, `units`, `inferredType`, `levels`, `isIdentifier`), `rowCount` (the final merged row count), `qcbfRowCount` (the original qCBF row count), `qcbfHash`, and `externalHash`.
 
@@ -139,6 +167,13 @@ A Rust command `execute_join` SHALL accept `projectRoot: String`, `qcbfRelativeP
 
 ### Requirement: Join Config Persistence
 
+Join settings SHALL persist as one nullable `uiState.dataVis.joinConfig`, containing external-source identity, keys, delimiter, missing tokens, and key-drop policy with no duplicate sheet-name field.
+
+#### Scenario: An optional join configuration is saved
+
+- **WHEN** join settings are persisted to the project
+- **THEN** defaults, source ownership, and nullability SHALL satisfy this shape:
+
 The join configuration SHALL persist to `uiState.dataVis.joinConfig` in the `.easl` project file. The persisted shape SHALL include: `externalSource` (`{ absolutePath, fileHash, sheetName }` — `sheetName` is the first sheet name for xlsx, `null` for CSV/TSV), `keys` (array of `{ left: string, right: string }` objects), `dropRightOn` (boolean, default `true`), `naTokens` (array of strings, default `["", "NaN", "NA", "n/a", "<NA>"]`), and `delimiter` (string, default `"auto"`). `joinConfig` SHALL be `null` as a unit when no external file is selected — `externalSource` SHALL NOT be `null` independently within a non-null `joinConfig`. The `sheetName` lives exclusively within `externalSource` — there is no top-level `joinConfig.sheetName` field.
 
 #### Scenario: Join config saved after configuration
@@ -157,6 +192,13 @@ The join configuration SHALL persist to `uiState.dataVis.joinConfig` in the `.ea
 - **THEN** `naTokens` SHALL default to `["", "NaN", "NA", "n/a", "<NA>"]`
 
 ### Requirement: Graphical Join Diagram
+
+Complete join setup SHALL display a native-component left-join diagram with source columns and row counts, statically emphasizing keys without per-pair connectors or an added diagramming library.
+
+#### Scenario: Inspections and at least one complete key pair are available
+
+- **WHEN** Select Data renders its join diagram
+- **THEN** boxes, labels, counts, colors, and interaction limits SHALL follow these rules:
 
 The "Select Data" step SHALL render a side-by-side join diagram when qCBF/external inspections exist and at least one complete key pair is configured. The left box SHALL display the qCBF filename, columns filtered to qCBF source using their original names before suffixing, and the original qCBF row count. The right box SHALL display the external filename, columns, and row count. A central left arrow and "LEFT JOIN" label SHALL appear between the boxes. Configured key names SHALL be statically emphasized in blue on the left and grape on the right; non-key names SHALL be dimmed. The diagram SHALL NOT align individual pairs, draw per-pair connector lines, or add hover-linked highlighting. It SHALL use Mantine components, CSS, and the arrow icon without an external diagramming library.
 
@@ -181,6 +223,13 @@ The "Select Data" step SHALL render a side-by-side join diagram when qCBF/extern
 - **THEN** the join diagram SHALL NOT render
 
 ### Requirement: Join Sanity Checks
+
+Complete join keys SHALL trigger advisory overlap, unmatched-row, and uniqueness checks automatically, without controlling Next readiness or requiring a separate button.
+
+#### Scenario: Complete key-pair configuration changes
+
+- **WHEN** the join diagram is available
+- **THEN** sanity checks and their messages SHALL follow these rules:
 
 When the diagram is available, sanity checks SHALL run automatically on the complete configured key pairs and display badges or alerts below it. A Rust command `check_join_sanity` SHALL accept the same arguments as `execute_join` (except `dropRightOn`). The checks SHALL be: (1) Key overlap — count of distinct qCBF key combinations found in the external keys; zero overlap SHALL show a red alert: "No matching values between join columns. Check that keys correspond." (2) Unmatched left rows — count of qCBF rows without an external match, displayed as an informational warning badge. (3) Left key uniqueness — duplicate qCBF keys SHALL show "Left keys are not unique — rows will be duplicated. Consider adding session/run to the join key." (4) Right key uniqueness — duplicate external keys SHALL show "Right keys are not unique — cartesian expansion will occur." Checks SHALL rerun after configuration changes without a button press. Results SHALL be advisory only and SHALL NOT control Next readiness.
 
@@ -210,6 +259,13 @@ When the diagram is available, sanity checks SHALL run automatically on the comp
 - **THEN** a success badge SHALL display "All checks passed", while Next readiness SHALL continue to depend on inspection and external availability
 
 ### Requirement: NA Token Configuration
+
+External join settings SHALL allow configurable missing-value tokens for row normalization while preserving fixed inference and chart missing-value rules.
+
+#### Scenario: External missing-value tokens are configured
+
+- **WHEN** an external source is selected and tokens are added, removed, or cleared
+- **THEN** controls, normalization, and warnings SHALL follow these rules:
 
 The "Select Data" step SHALL display a "Missing values" section (visible only when an external file is selected) with a `TagsInput` pre-filled with default tokens: `["", "NaN", "NA", "n/a", "<NA>"]`. The user SHALL add custom tokens (e.g., `-9999`, `null`) and remove default tokens. Configured tokens SHALL be passed to `execute_join` and `check_join_sanity` to normalize matching external row values to empty strings; qCBF handling SHALL remain unchanged. Preview and joined column metadata SHALL still use raw external inspection and fixed missing-value rules, not configured tokens. Frontend chart missing checks SHALL likewise use fixed rules on returned rows. If all tokens are cleared, the UI SHALL display "No NA tokens specified — all values treated as present." This warning SHALL NOT alter fixed inference or chart missing-value checks.
 
@@ -258,6 +314,13 @@ When the user changes the qCBF file selection, `joinConfig` SHALL be set to `nul
 
 ### Requirement: File Change Invalidation on External File Change
 
+External replacement SHALL preserve setup for matching content and require confirmation before adopting changed content and resetting dependent setup, preserving unrelated join options and cancellation state.
+
+#### Scenario: A replacement external file is selected
+
+- **WHEN** replacement content matches or differs from the saved hash
+- **THEN** path updates, confirmation, resets, and autosave SHALL follow these rules:
+
 External replacement SHALL be content-hash based, not path based. When the selected replacement matches the saved hash, its source path SHALL be updated without clearing join keys or dependent setup, following `data-vis-contract`. Different content SHALL require confirmation before adoption. On confirmation, `joinConfig.externalSource` SHALL adopt `{ absolutePath, fileHash, sheetName }`, `keys` SHALL reset to `[]`, and dependent column types, identifiers, level orderings, axes, filters, stage, and transient chart/viewer setup SHALL reset. `naTokens`, `delimiter`, and `dropRightOn` SHALL be preserved. Cancellation SHALL leave saved configuration unchanged. Accepted replacement edits SHALL use shared autosave.
 
 #### Scenario: Confirming changed external content resets keys and preserves preferences
@@ -277,6 +340,13 @@ External replacement SHALL be content-hash based, not path based. When the selec
 
 ### Requirement: Removing External File Mid-Session
 
+Removing an external source SHALL clear saved join selection and local availability without reloading or resetting the current inspection, cache, or dependent visualization settings.
+
+#### Scenario: A user removes the selected external source
+
+- **WHEN** Remove is clicked on Select Data
+- **THEN** persistence, local cleanup, retained data, and subsequent advancement SHALL follow these rules:
+
 When the user clicks Remove on Select Data, `joinConfig` SHALL be set to `null` and persisted, external-source availability SHALL become unconfigured, and the local external preview/inspection marker SHALL clear. Removal SHALL NOT call `load_qcbf_data`, replace the current store inspection or backend cache, or reset column types, level orderings, axes, or filters. The stepper SHALL remain on Select Data. A subsequent no-join Next SHALL advance using that current inspection without reloading qCBF-only data.
 
 #### Scenario: Removing external file preserves current loaded data
@@ -285,6 +355,13 @@ When the user clicks Remove on Select Data, `joinConfig` SHALL be set to `null` 
 - **THEN** `joinConfig` SHALL be `null`, but current merged inspection, dependent settings, and backend cached rows SHALL remain until a later load replaces them; Next SHALL advance without a reload
 
 ### Requirement: External File mtime Re-Validation
+
+Window focus SHALL revalidate changed external files, retaining saved setup and offering Relink when content changes or becomes unavailable while preserving readable qCBF-only work.
+
+#### Scenario: Focus detects changed or unreadable external data
+
+- **WHEN** the active join's external file is revalidated on window focus
+- **THEN** mtime checks, hash comparison, availability, and relinking SHALL follow these rules:
 
 On Tauri window focus, if `joinConfig` is active, the system SHALL stat the external file's mtime. If the mtime has changed since the last validation, `execute_join` SHALL re-run and the returned `externalHash` SHALL be compared with `joinConfig.externalSource.fileHash`. If the hash mismatches or the external file is missing or unreadable, the saved `joinConfig` and dependent contract settings SHALL remain unchanged. The system SHALL show a persistent Relink warning, disable Select Data Next, and keep readable qCBF-only data available through `load_qcbf_data`. Relinking matching content SHALL preserve setup; adopting changed content SHALL require confirmation before resetting dependent setup, as defined in `data-vis-contract`.
 
@@ -304,6 +381,13 @@ On Tauri window focus, if `joinConfig` is active, the system SHALL stat the exte
 - **THEN** `joinConfig` SHALL remain unchanged, Select Data Next SHALL be disabled, and a persistent Relink warning SHALL identify the missing saved source
 
 ### Requirement: Join Execution on Step Advance
+
+Select Data Next SHALL execute only nonempty complete joins with available sources; otherwise it SHALL advance using current inspection without reloading, while failures SHALL prevent advancement.
+
+#### Scenario: A user advances from Select Data
+
+- **WHEN** Next is evaluated or clicked
+- **THEN** readiness, join execution, successful reset scope, and no-join advancement SHALL follow these rules:
 
 On Select Data, Next SHALL be disabled only when no inspection is loaded or a configured external source is not available. Key completeness and sanity results SHALL NOT disable it. With a current project and qCBF source, clicking Next SHALL call `execute_join` only if `joinConfig` has a non-empty key list and every pair is complete. On success, the returned `DataInspection` SHALL replace store inspection, `AppState.active_data` SHALL contain the merged result, column types SHALL reset to inference, level orderings/axes SHALL clear, and stage SHALL advance to Column Types. Join failure SHALL show an error without advancing. With no join config, empty keys, or any incomplete pair, Next SHALL advance using the current inspection without calling `execute_join` or `load_qcbf_data`; that inspection MAY still contain a previous join after external removal.
 
@@ -329,6 +413,13 @@ On Select Data, Next SHALL be disabled only when no inspection is loaded or a co
 
 ### Requirement: Join Config Change Re-Execution
 
+Advancing complete join setup SHALL always execute the current configuration and replace merged state, while configuration edits alone SHALL not reload data.
+
+#### Scenario: A user revisits and advances join configuration
+
+- **WHEN** Select Data advances after back navigation or configuration edits
+- **THEN** execution, replacement, dependent resets, and no-join behavior SHALL follow these rules:
+
 Whenever the user advances from Select Data with an available external source and a non-empty list of complete key pairs, `execute_join` SHALL run with the current configuration, whether or not settings changed during back navigation. On success, merged inspection/cache SHALL be replaced wholesale, column types SHALL reset to inference, and level orderings/axes SHALL clear. Configuration edits alone SHALL NOT reload the cache. Empty/incomplete key lists and external removal SHALL instead use the no-join advance behavior above.
 
 #### Scenario: Back-navigation with join key change re-runs execute_join
@@ -348,6 +439,13 @@ Whenever the user advances from Select Data with an available external source an
 
 ### Requirement: File Stats Command
 
+`stat_file` SHALL return cross-platform metadata-based modification time and size, failing for missing files and supporting cheap focus-time revalidation.
+
+#### Scenario: External-source freshness requests file metadata
+
+- **WHEN** `stat_file` receives a path
+- **THEN** response fields, time representation, and missing-file behavior SHALL follow these rules:
+
 A Rust command `stat_file` SHALL accept `path: String` and return a `FileStats` object containing `mtime` (last modified time as a Unix epoch seconds string) and `size` (file size in bytes). The command SHALL use `std::fs::metadata` for cross-platform mtime resolution (NTFS last-write-time on Windows, inode mtime on macOS/Linux). If the file does not exist, the command SHALL return an error. This command is used for mtime-based re-validation on window focus to avoid unnecessary full file reads and hash computations when files are unchanged.
 
 #### Scenario: Stat existing file
@@ -361,6 +459,13 @@ A Rust command `stat_file` SHALL accept `path: String` and return a `FileStats` 
 - **THEN** the command SHALL return an error
 
 ### Requirement: Active Data Cache Invariants
+
+One project-scoped active-data cache SHALL serve qCBF and joined reads, replacing loaded data wholesale, retaining pristine qCBF rows, and separating previews and frontend hash validation from cache ownership.
+
+#### Scenario: Visualization loads, joins, reads, or switches projects
+
+- **WHEN** an operation accesses or changes active visualization data
+- **THEN** cache ownership and permitted mutations SHALL satisfy these invariants:
 
 The `AppState.active_data: Mutex<Option<ActiveData>>` slot SHALL serve as the single unified data cache for both qCBF-only and join-active flows. The following invariants SHALL hold:
 

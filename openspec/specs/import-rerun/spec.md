@@ -6,6 +6,13 @@ Define import configuration snapshots and safe selective import re-runs.
 
 ### Requirement: Two-tier staleness detection
 
+Import staleness SHALL compare normalized logical configuration with the last successful snapshot, distinguishing all-subject structural changes from the documented first-row-based metadata-group changes.
+
+#### Scenario: Current import configuration is compared with its baseline
+
+- **WHEN** step 5 initializes after edits or source relinking
+- **THEN** structural, metadata, and no-staleness classification SHALL follow these rules:
+
 On entering import step 5, the system SHALL compare the current import configuration against `uiState.import.mostRecentConfig` to determine per-subject staleness. Source locations SHALL be compared by normalized logical identity rather than resolved absolute runtime path.
 
 **Structural staleness**: If any of the following fields differ between current config and snapshot, ALL subjects SHALL be marked stale: logical `sourceDataPath`, `pathPatterns`, `tokenizerConfigs`, `bMatchDirectories`, `modalityAliases`, `sessionAliases`, `runAliases`, `subjectRenames`.
@@ -56,6 +63,13 @@ On entering import step 5, the system SHALL compare the current import configura
 
 ### Requirement: Import progress reconstruction from lock files
 
+Without a replayable native run, committed-artifact audit SHALL establish completion only from safe ready evidence and nonempty project rawdata, separately from configuration staleness.
+
+#### Scenario: Progress is reconstructed without an attached run
+
+- **WHEN** native audit inspects committed import artifacts
+- **THEN** completed, failed, pending, and stale status SHALL follow these rules:
+
 When no active or replayable native run supplies progress, the system SHALL reconstruct per-subject status through an active-project-owned native audit of committed import artifacts. The audit SHALL reject unsafe roots and symlinks and SHALL report a subject completed only when its canonical project import lock contains a regular `999_ready.status` committed by native relocation and its project rawdata subject directory is present and nonempty. Partial status files without a valid ready artifact SHALL report failed. Subjects with no verified artifact SHALL remain pending. Configuration staleness SHALL be computed separately from `mostRecentConfig` and SHALL not convert an unverified subject into completed.
 
 #### Scenario: Completed subject reconstructs from committed artifacts
@@ -104,6 +118,13 @@ When no active or replayable native run supplies progress, the system SHALL reco
 - **THEN** the current subject SHALL show pending and an old-name artifact SHALL not be attributed to it
 
 ### Requirement: Import progress table with subject selection
+
+Import execution SHALL present selectable subject progress with status filters, staleness-aware selection, diagnostic step text, and log actions determined by subject status and available logs.
+
+#### Scenario: Step 5 displays initial or revisited subject progress
+
+- **WHEN** the combined import execution view renders subject rows
+- **THEN** filters, selection, icons, steps, and log controls SHALL satisfy this layout:
 
 The import step 5 execution view SHALL replace the current `ImportProgressTable` and `ImportSummary` with a combined view:
 
@@ -158,6 +179,13 @@ The import step 5 execution view SHALL replace the current `ImportProgressTable`
 - **THEN** its row SHALL show "No Logs", not "View Errors"
 
 ### Requirement: Selective re-run with confirmation
+
+Selective import SHALL obtain and bind one immutable native replacement inventory, confirm destructive replacement when required, and stage only selected subjects while preserving authorized unselected locks.
+
+#### Scenario: Selected subjects are submitted for re-import
+
+- **WHEN** Start Import is requested and replacement confirmation is accepted or cancelled
+- **THEN** inventory triggers, immutable scope, lock preservation, and staging SHALL follow this sequence:
 
 The system SHALL provide "Start Import" and "Stop" controls on step 5. When the user clicks "Start Import":
 
@@ -272,6 +300,13 @@ Each stale status icon overlay SHALL display a tooltip on hover with text: "Conf
 
 ### Requirement: Revisit and re-sync confirmed BIDS-direct projects
 
+Confirmed BIDS projects SHALL retain their persisted summary during explicit re-scan and replace BIDS-derived mappings only after successful re-confirmation.
+
+#### Scenario: Confirmed BIDS import is revisited and re-scanned
+
+- **WHEN** the user returns to Import or requests Re-scan BIDS
+- **THEN** summary, scan source, editable review, and accepted mapping replacement SHALL follow these rules:
+
 When user navigates to Import page on a BIDS-direct project where `uiState.import.bidsReviewConfirmed === true`, `BIDSReviewPanel` SHALL render a persisted summary and support an explicit re-scan/re-confirm flow.
 
 Initial revisit state:
@@ -327,6 +362,13 @@ The re-scan flow SHALL NOT clear the previously confirmed mapping state until re
 
 ### Requirement: Import re-run support
 
+DICOM projects SHALL retain configuration staleness and selective re-import, while BIDS-direct projects SHALL use explicit metadata re-scan and re-confirmation instead of DICOM delta machinery.
+
+#### Scenario: Import is revisited for either data-source kind
+
+- **WHEN** a completed DICOM or BIDS-direct project returns to Import
+- **THEN** source-specific re-run behavior SHALL follow these rules:
+
 For DICOM-import projects (`dataSource === "dicom"`), the existing `import-rerun` behavior SHALL be preserved: staleness detection, reconstruction from lock files, and re-import delta execution all work as before.
 
 For BIDS-direct projects (`dataSource === "bids"`):
@@ -365,6 +407,13 @@ Selective retry defaults and retry-lock preservation SHALL use reconciled native
 - **THEN** those artifacts SHALL not qualify any selected subject as fresh completed for retry planning
 
 ### Requirement: Readable successful import configuration
+
+Only authoritative successful import reconciliation SHALL replace the persisted ordinary-JSON configuration baseline with the admitted attempt's immutable settings, preserving prior baselines for other outcomes and rejecting encoded or invalid snapshots.
+
+#### Scenario: An admitted import attempt settles and updates its baseline
+
+- **WHEN** native reconciliation persists a terminal import result
+- **THEN** capture timing, snapshot contents, path identity, compatibility, and acknowledgement SHALL follow these rules:
 
 Each admitted import attempt SHALL capture its immutable configuration before staging mutation. Only an authoritative Completed result SHALL replace the persisted successful baseline at `uiState.import.mostRecentConfig`; rejected, failed, cancelled, or interrupted attempts SHALL preserve the prior baseline. The snapshot SHALL include source location, path patterns, tokenizer assignments, directory matching, modality/session/run aliases, subject renames, metadata groups, subject/group rows, and selected profile reference when configured. It SHALL be `null` before the first successful import. Internal sources SHALL remain project-relative and external sources absolute, matching current configuration's logical identity.
 

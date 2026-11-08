@@ -29,6 +29,13 @@ Every reviewer SHALL have an indexed staleness result, including empty results a
 
 ### Requirement: Reviewer Tab Isolation
 
+Multi-reviewer QC tabs SHALL display the active reviewer's indexed verdict and staleness slices while retaining visible completion badges and allowing tab switching, without claiming access control or strict blinding.
+
+#### Scenario: A user switches between reviewer tabs
+
+- **WHEN** multi-reviewer QC Selection renders or changes its active reviewer
+- **THEN** table subscription, badge visibility, and isolation limits SHALL follow these rules:
+
 In multi-reviewer mode, the QC Selection step SHALL render a tabbed interface where each reviewer's table displays only that reviewer's verdicts. Other reviewers' completion counts remain visible in tab badges, and their verdicts are accessible by switching tabs; this is not an access-control or strict blinding mechanism.
 
 Each `Tabs.Panel` SHALL render its own `QcSelectionTable` instance, subscribed exclusively to the active reviewer's verdict slice from `verdicts[activeReviewerId]` and, for stale indicators, `staleVerdicts[activeReviewerId]`. Switching tabs SHALL update `activeReviewerId` and cause the table to re-render with the newly selected reviewer's verdicts and staleness slice.

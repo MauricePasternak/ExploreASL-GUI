@@ -22,6 +22,13 @@ The reviewer registry SHALL enforce a maximum of 5 reviewers. The `addReviewer` 
 
 ### Requirement: Rename Reviewer Action
 
+Reviewer rename SHALL validate a bounded nonempty label and preserve identity, verdicts, and active selection, autosaving only accepted changes while exposing rejected submissions without changing accepted revisions.
+
+#### Scenario: A reviewer label is submitted for native acceptance
+
+- **WHEN** rename targets an existing or unknown reviewer with valid or invalid text
+- **THEN** accepted state, dirty/error state, revisions, and autosave SHALL follow these rules:
+
 `projectStore` SHALL expose `renameReviewer(id: string, label: string)`. Native acceptance SHALL locate the registry entry by `id` and replace its label only when `label` is nonempty and at most 100 Unicode characters. A successful changed label SHALL mark the project dirty and schedule shared autosave. An unknown `id` SHALL leave accepted configuration and revisions unchanged and schedule no save; submission MAY temporarily mark the client dirty while pending. A submitted invalid label SHALL be rejected without changing the accepted registry or revisions, but the client SHALL expose `saveError` and remain dirty after rejection. Renaming SHALL preserve the reviewer's `id`, `createdAt`, verdict slice, and active selection.
 
 #### Scenario: Valid label renames reviewer and marks project dirty
@@ -121,6 +128,13 @@ Adding a reviewer SHALL append a new UUID, UTC timestamp, and label "Reviewer N"
 - **THEN** adding SHALL make no change and schedule no save
 
 ### Requirement: Remove registered reviewer
+
+Reviewer removal SHALL preserve remaining indexed state, retain at least one reviewer, update active selection, and require UI consent before permanent verdict loss without duplicating confirmation in configuration actions.
+
+#### Scenario: A reviewer with or without verdicts is removed
+
+- **WHEN** removal is requested or its required confirmation is cancelled
+- **THEN** registry, verdict slices, resolutions, selection, and autosave SHALL follow these rules:
 
 Removal SHALL delete the selected reviewer and only that reviewer's verdict slice, preserving remaining registry and indexed verdicts. Removing the active reviewer SHALL select the first remaining reviewer. The sole remaining reviewer SHALL not be removable. Reducing the count to one SHALL clear resolution entries but SHALL not clear reviewer identity, unwrap verdicts, or clear active selection. Valid removal SHALL autosave.
 
